@@ -1,13 +1,22 @@
-import { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl, Alert } from 'react-native';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Glass } from '../../components/Glass';
 import { DeviceCard } from '../../components/DeviceCard';
 import { BeamButton } from '../../components/BeamButton';
-import { colors, typography, spacing } from '../../lib/theme';
+import { colors, typography, spacing, radius } from '../../lib/theme';
 import { Device } from '../../types';
 import { getStoredDevices, storeDevices } from '../../lib/store';
+import {
+  shareDomainViaNearby,
+  scanForNearbyDomains,
+  acceptNearbyDomain,
+  stopNearby,
+  isNearbySupported,
+  NearbyPeer,
+  NearbyState,
+} from '../../lib/nearby';
 
 // ═══ MOCK DATA — Replace with Supabase fetch when MCP is connected ═══
 const MOCK_DEVICES: Device[] = [
@@ -16,10 +25,26 @@ const MOCK_DEVICES: Device[] = [
   { id: '3', name: "Andy's MacBook", type: 'web', online: false, lastSeen: Date.now() - 3600000 },
 ];
 
+// ═══ MOCK domain — Replace with real domain from user profile ═══
+const MY_DOMAIN = 'andy.beam';
+
 export default function DevicesScreen() {
   const [devices, setDevices] = useState<Device[]>(MOCK_DEVICES);
   const [refreshing, setRefreshing] = useState(false);
   const onlineCount = devices.filter((d) => d.online).length;
+  const [nearbyState, setNearbyState] = useState<NearbyState>('idle');
+  const [nearbyPeers, setNearbyPeers] = useState<NearbyPeer[]>([]);
+  const [statusText, setStatusText] = useState('');
+  const [showNearbyUI, setShowNearbyUI] = useState(false);
+  const nearbyCleanupRef = useRef<(() => void) | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      nearbyCleanupRef.current?.();
+      stopNearby();
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -34,9 +59,146 @@ export default function DevicesScreen() {
       Alert.alert('Offline', `${device.name} isn't online right now.`);
       return;
     }
-    // Navigate to cast screen with device preselected
     router.push('/(tabs)/cast');
   };
+
+  // ─── Share My Domain via Nearby ──────────────────────────
+
+  async function handleShareDomain() {
+    setShowNearbyUI(true);
+    setNearbyPeers([]);
+    setStatusText('Looking for nearby Beam devices...');
+
+    try {
+      const result = await shareDomainViaNearby('Andy', MY_DOMAIN, {
+        onStateChange: (state, detail) => {
+          setNearbyState(state);
+          switch (state) {
+            case 'broadcasting':
+              setStatusText('Tapping nearby phones to Beam...');
+              break;
+            case 'connecting':
+              setStatusText('Connecting...');
+              break;
+            case 'connected':
+              setStatusText('Domain shared!');
+              break;
+            case 'error':
+              setStatusText(`Error: ${detail}`);
+              break;
+          }
+        },
+        onPeerFound: (peer) => {
+          setNearbyPeers((prev) => {
+            if (prev.find((p) => p.displayName === peer.displayName)) return prev;
+            return [...prev, peer];
+          });
+        },
+        onPeerLost: (displayName) => {
+          setNearbyPeers((prev) => prev.filter((p) => p.displayName !== displayName));
+        },
+        onDomainReceived: (token, from) => {
+          setStatusText(`Domain "${token}" received from ${from}!`);
+          // ═══ Save to device list via Supabase ═══
+        },
+        onSuccess: (result) => {
+          if (result.method === 'invite-link') {
+            setStatusText('Invite link shared via share sheet');
+          }
+        },
+        onTimeout: () => {
+          setStatusText('No nearby Beam devices found');
+        },
+        onError: (error) => {
+          setStatusText(`Error: ${error.message}`);
+        },
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      // Auto-dismiss the UI after a moment
+      setTimeout(() => {
+        setShowNearbyUI(false);
+        setNearbyState('idle');
+        setStatusText('');
+      }, 3000);
+    }
+  }
+
+  // ─── Scan for Nearby Domains ─────────────────────────────
+
+  async function handleScanNearby() {
+    setShowNearbyUI(true);
+    setNearbyPeers([]);
+    setStatusText('Scanning for nearby devices...');
+
+    try {
+      await scanForNearbyDomains('Andy', {
+        onStateChange: (state, detail) => {
+          setNearbyState(state);
+          switch (state) {
+            case 'scanning':
+              setStatusText('Hold your phone near theirs...');
+              break;
+            case 'connecting':
+              setStatusText('Connecting...');
+              break;
+            case 'connected':
+              setStatusText('Connected!');
+              break;
+            case 'error':
+              setStatusText(`Error: ${detail}`);
+              break;
+          }
+        },
+        onPeerFound: (peer) => {
+          setNearbyPeers((prev) => {
+            if (prev.find((p) => p.displayName === peer.displayName)) return prev;
+            return [...prev, peer];
+          });
+          setStatusText(`Found: ${peer.displayName}`);
+        },
+        onPeerLost: (displayName) => {
+          setNearbyPeers((prev) => prev.filter((p) => p.displayName !== displayName));
+        },
+        onDomainReceived: (token, from) => {
+          setStatusText(`Added domain "${token}" from ${from}!`);
+          // ═══ Save to device list via Supabase ═══
+        },
+        onSuccess: () => {
+          setStatusText('Domain added!');
+        },
+        onError: (error) => {
+          setStatusText(`Error: ${error.message}`);
+        },
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
+  }
+
+  // ─── Accept a discovered peer's domain ───────────────────
+
+  async function handleAcceptPeer(peer: NearbyPeer) {
+    setStatusText(`Connecting to ${peer.displayName}...`);
+    try {
+      await acceptNearbyDomain(peer.displayName);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
+  }
+
+  // ─── Cancel Nearby ──────────────────────────────────────
+
+  async function handleCancelNearby() {
+    await stopNearby();
+    setShowNearbyUI(false);
+    setNearbyState('idle');
+    setNearbyPeers([]);
+    setStatusText('');
+  }
+
+  // ─── Render ──────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -68,6 +230,90 @@ export default function DevicesScreen() {
               Install Beam on another device and sign in to add it to your domain.
             </Text>
           </Glass>
+        }
+        ListFooterComponent={
+          <View style={styles.nearbySection}>
+            {/* ─── Nearby Section Header ─────────────────────────── */}
+            <Text style={[typography.title3, { color: colors.text, marginBottom: spacing.sm }]}>
+              Add Device via Nearby
+            </Text>
+            <Text style={[typography.subhead, { color: colors.textTertiary, marginBottom: spacing.md }]}>
+              {isNearbySupported()
+                ? 'Tap your phone against theirs to share your domain wirelessly.'
+                : 'Nearby sharing is only available on iOS.'}
+            </Text>
+
+            {!showNearbyUI ? (
+              <Glass style={styles.nearbyActions}>
+                <BeamButton
+                  title={Platform.OS === 'ios' ? "📡 Share My Domain" : "Share Domain"}
+                  onPress={handleShareDomain}
+                  variant="primary"
+                  style={styles.nearbyButton}
+                  disabled={!isNearbySupported()}
+                />
+                <BeamButton
+                  title={Platform.OS === 'ios' ? "🔍 Scan for Nearby" : "Scan Nearby"}
+                  onPress={handleScanNearby}
+                  variant="secondary"
+                  style={styles.nearbyButton}
+                  disabled={!isNearbySupported()}
+                />
+              </Glass>
+            ) : (
+              /* ─── Nearby Active UI ───────────────────────────── */
+              <Glass style={styles.nearbyActive}>
+                <Text style={[typography.headline, { color: colors.primary, textAlign: 'center', marginBottom: spacing.sm }]}>
+                  {nearbyState === 'broadcasting' && '📡 Broadcasting Domain'}
+                  {nearbyState === 'scanning' && '🔍 Scanning...'}
+                  {nearbyState === 'connecting' && '🔄 Connecting...'}
+                  {nearbyState === 'connected' && '✅ Connected!'}
+                  {nearbyState === 'idle' && 'Nearby'}
+                  {nearbyState === 'error' && '❌ Error'}
+                </Text>
+
+                <Text style={[typography.subhead, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md }]}>
+                  {statusText}
+                </Text>
+
+                {/* Spinner / state indicator */}
+                {(nearbyState === 'broadcasting' || nearbyState === 'scanning' || nearbyState === 'connecting') && (
+                  <Text style={[typography.caption1, { color: colors.textTertiary, textAlign: 'center', marginBottom: spacing.md }]}>
+                    Keep the devices near each other...
+                  </Text>
+                )}
+
+                {/* Discovered peers list (scanning mode) */}
+                {nearbyPeers.length > 0 && (
+                  <View style={styles.peersList}>
+                    {nearbyPeers.map((peer, i) => (
+                      <BeamButton
+                        key={peer.displayName}
+                        title={`Accept domain from ${peer.displayName}`}
+                        onPress={() => handleAcceptPeer(peer)}
+                        variant="primary"
+                        style={styles.peerButton}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {/* Invite link hint */}
+                {nearbyState === 'idle' && nearbyPeers.length === 0 && statusText.includes('No nearby') && (
+                  <Text style={[typography.caption1, { color: colors.textTertiary, textAlign: 'center', marginBottom: spacing.md }]}>
+                    An invite link was shared — if they don't have Beam, they can download it from the App Store.
+                  </Text>
+                )}
+
+                <BeamButton
+                  title="Cancel"
+                  onPress={handleCancelNearby}
+                  variant="secondary"
+                  style={styles.cancelButton}
+                />
+              </Glass>
+            )}
+          </View>
         }
       />
 
@@ -111,5 +357,34 @@ const styles = StyleSheet.create({
   },
   fabButton: {
     width: '100%',
+  },
+  // ── Nearby Section ───────────────────────────────────────
+  nearbySection: {
+    marginTop: spacing.xxl,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.separator,
+  },
+  nearbyActions: {
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  nearbyButton: {
+    width: '100%',
+  },
+  nearbyActive: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  peersList: {
+    width: '100%',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  peerButton: {
+    width: '100%',
+  },
+  cancelButton: {
+    minWidth: 120,
   },
 });

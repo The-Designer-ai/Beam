@@ -20,7 +20,8 @@
         "UIBackgroundModes": ["audio", "remote-notification", "audio-video-pip"]
       },
       "entitlements": {
-        "com.apple.developer.replay-kit-broadcast": true
+        "com.apple.developer.replay-kit-broadcast": true,
+        "com.apple.developer.avfoundation.picture-in-picture": true
       }
     },
     "plugins": [
@@ -41,7 +42,8 @@
           "extensionName": "BeamBroadcast",
           "extensionBundleIdentifier": "com.beam.app.broadcast"
         }
-      ]
+      ],
+      "./modules/beam-nearby/withBeamNearby"
     ],
     "experiments": {
       "typedRoutes": true

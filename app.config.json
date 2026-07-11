@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Beam",
+    "slug": "beam",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "beam",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.beam.app",
+      "infoPlist": {
+        "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
+        "NSCameraUsageDescription": "Beam needs camera access for video streaming.",
+        "NSMicrophoneUsageDescription": "Beam needs microphone access for audio in screen sharing.",
+        "UIBackgroundModes": ["audio", "remote-notification", "audio-video-pip"]
+      },
+      "entitlements": {
+        "com.apple.developer.replay-kit-broadcast": true
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-blur",
+      "expo-notifications",
+      "react-native-webrtc",
+      [
+        "react-native-revenuecat",
+        {
+          "apiKey": "REVENUECAT_API_KEY_PLACEHOLDER"
+        }
+      ],
+      [
+        "@videosdk.live/expo-ios-screen-share",
+        {
+          "appleTeamId": "4L4WKW92B5",
+          "extensionName": "BeamBroadcast",
+          "extensionBundleIdentifier": "com.beam.app.broadcast"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

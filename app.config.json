@@ -27,11 +27,11 @@
       "entitlements": {
         "com.apple.developer.replay-kit-broadcast": true,
         "com.apple.developer.avfoundation.picture-in-picture": true
-      }
+      },
+      "buildNumber": "2"
     },
     "plugins": [
       "expo-router",
-      "expo-blur",
       "expo-notifications",
       [
         "@videosdk.live/expo-ios-screen-share",

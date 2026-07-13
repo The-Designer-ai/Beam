@@ -8,7 +8,12 @@ import { PaywallModal } from '../../components/PaywallModal';
 import { colors, typography, spacing, radius } from '../../lib/theme';
 import { getStoredUser, clearUser, getSubscription, storeSubscription } from '../../lib/store';
 import { User, SubscriptionTier } from '../../types';
-import { checkProStatus, purchasePackage, restorePurchases, getOfferings } from '../../lib/revenuecat';
+import {
+  initRevenueCat,
+  checkProStatus,
+  restorePurchases,
+  logOutRevenueCat,
+} from '../../lib/revenuecat';
 import {
   registerForPushNotifications,
   unregisterPushNotifications,
@@ -31,6 +36,16 @@ export default function SettingsScreen() {
     const sub = await getSubscription();
     setUser(u);
     setSubscription(sub);
+
+    // Check RevenueCat for latest subscription status
+    try {
+      const { isPro } = await checkProStatus();
+      if (isPro && sub?.type !== 'pro') {
+        setSubscription({ type: 'pro' });
+      }
+    } catch {
+      // RevenueCat not configured yet — use local state
+    }
   }
 
   async function handleToggleNotifications(value: boolean) {
@@ -38,7 +53,6 @@ export default function SettingsScreen() {
     if (value) {
       const token = await registerForPushNotifications();
       if (!token) {
-        // Permission denied — flip toggle back
         setNotifications(false);
         Alert.alert(
           'Notifications Disabled',
@@ -57,6 +71,9 @@ export default function SettingsScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          try {
+            await logOutRevenueCat();
+          } catch {}
           await clearUser();
           router.replace('/(auth)/login');
         },
@@ -64,43 +81,18 @@ export default function SettingsScreen() {
     ]);
   }
 
-  async function handleSubscribeMonthly() {
-    setPaywallLoading(true);
-    try {
-      // ═══ MOCK — Replace with RevenueCat purchase when Supabase MCP is connected ═══
-      // ═══ Replace with RevenueCat purchase ═══
-      // const offerings = await getOfferings();
-      // if (offerings?.monthly) {
-      //   await purchasePackage(offerings.monthly);
-      // }
-      await storeSubscription({ type: 'pro' });
+  async function handlePurchaseComplete(isPro: boolean) {
+    if (isPro) {
       setSubscription({ type: 'pro' });
       setShowPaywall(false);
       Alert.alert('Welcome to Pro!', 'You now have unlimited devices and remote casting.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    } finally {
-      setPaywallLoading(false);
-    }
-  }
-
-  async function handleSubscribeYearly() {
-    setPaywallLoading(true);
-    try {
-      await storeSubscription({ type: 'pro' });
-      setSubscription({ type: 'pro' });
-      setShowPaywall(false);
-      Alert.alert('Welcome to Pro!', 'You now have unlimited devices and remote casting.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    } finally {
-      setPaywallLoading(false);
     }
   }
 
   async function handleRestore() {
+    setPaywallLoading(true);
     try {
-      const isPro = await restorePurchases();
+      const { isPro } = await restorePurchases();
       if (isPro) {
         setSubscription({ type: 'pro' });
         Alert.alert('Restored', 'Your Pro subscription has been restored.');
@@ -109,6 +101,8 @@ export default function SettingsScreen() {
       }
     } catch (err) {
       Alert.alert('Error', 'Could not restore purchases.');
+    } finally {
+      setPaywallLoading(false);
     }
   }
 
@@ -156,6 +150,15 @@ export default function SettingsScreen() {
               />
             )}
           </View>
+          {isPro && (
+            <BeamButton
+              title="Manage Subscription"
+              onPress={() => setShowPaywall(true)}
+              variant="secondary"
+              size="sm"
+              style={{ marginTop: spacing.md }}
+            />
+          )}
         </Glass>
 
         {/* Features */}
@@ -213,10 +216,7 @@ export default function SettingsScreen() {
       <PaywallModal
         visible={showPaywall}
         onClose={() => setShowPaywall(false)}
-        onSubscribeMonthly={handleSubscribeMonthly}
-        onSubscribeYearly={handleSubscribeYearly}
-        onRestore={handleRestore}
-        loading={paywallLoading}
+        onPurchaseComplete={handlePurchaseComplete}
       />
     </View>
   );

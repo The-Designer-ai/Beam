@@ -25,6 +25,8 @@ export interface Room {
 export interface SubscriptionTier {
   type: 'free' | 'pro';
   expiresAt?: number;
+  productIdentifier?: string;
+  latestPurchaseDate?: string;
 }
 
 export type SignalMessage =

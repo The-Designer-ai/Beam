@@ -23,8 +23,7 @@
     "preview": {
       "ios": {
         "ascAppId": "6790571863",
-        "appleTeamId": "4L4WKW92B5",
-        "betaBuildGroupName": "Testers"
+        "appleTeamId": "4L4WKW92B5"
       }
     },
     "production": {

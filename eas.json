@@ -12,14 +12,21 @@
       "ios": {
         "simulator": false
       },
-      "distribution": "internal"
+      "distribution": "internal",
+      "credentialsSource": "remote"
     },
     "production": {
       "autoIncrement": true
     }
   },
   "submit": {
-    "production": {
+    "preview": {
+      "ios": {
+        "ascAppId": "6790571863",
+        "appleTeamId": "4L4WKW92B5",
+        "betaBuildGroupName": "Testers"
+      }
+    },
       "ios": {
         "ascAppId": "6790571863",
         "appleTeamId": "4L4WKW92B5"

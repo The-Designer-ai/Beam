@@ -14,10 +14,15 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.beam.stream",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
         "NSCameraUsageDescription": "Beam needs camera access for video streaming.",
         "NSMicrophoneUsageDescription": "Beam needs microphone access for audio in screen sharing.",
-        "UIBackgroundModes": ["audio", "remote-notification", "audio-video-pip"]
+        "UIBackgroundModes": [
+          "audio",
+          "remote-notification",
+          "audio-video-pip"
+        ]
       },
       "entitlements": {
         "com.apple.developer.replay-kit-broadcast": true,
@@ -28,13 +33,6 @@
       "expo-router",
       "expo-blur",
       "expo-notifications",
-      "react-native-webrtc",
-      [
-        "react-native-revenuecat",
-        {
-          "apiKey": "test_KxgGlPAZWCvNcfEEGROZUnOaGpV"
-        }
-      ],
       [
         "@videosdk.live/expo-ios-screen-share",
         {
@@ -47,6 +45,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "fc0ce84c-0039-46f7-8d50-b0b212036a3c"
+      }
+    },
+    "owner": "the_designer"
   }
 }

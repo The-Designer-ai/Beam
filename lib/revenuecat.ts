@@ -12,8 +12,8 @@ import Purchases, {
   CustomerInfo,
   PurchasesOffering,
   PurchasesPackage,
-  PURCHASES_ERROR_CODE,
 } from 'react-native-purchases';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { storeSubscription } from './store';
 
 const API_KEY = 'test_KxgGlPAZWCvNcfEEGROZUnOaGpV';
@@ -29,9 +29,8 @@ export const PRODUCT_IDS = {
 // ─── Configure RevenueCat SDK ─────────────────────────────
 
 export async function initRevenueCat(userId?: string): Promise<void> {
-  await Purchases.configure({
-    apiKey: ***
-    appUserID: userId,
+  Purchases.configure({
+    apiKey: ***    appUserID: userId,
   });
 
   // Enable automatic paywall presentation
@@ -92,35 +91,26 @@ export async function checkProStatus(): Promise<{
     const isPro = await syncSubscription(customerInfo);
     return { isPro, customerInfo };
   } catch {
-    // Not configured yet or no internet — treat as free
     return { isPro: false, customerInfo: null };
   }
 }
 
-// ─── Present RevenueCat hosted paywall (from purchases-ui) ─
-//
-// RevenueCat Paywalls let you design and iterate on paywalls
-// from their dashboard without app updates. This shows the
-// current offering's paywall if one is configured.
-//
-// Returns true if the paywall was shown, false if none configured.
-// ───────────────────────────────────────────────────────────
+// ─── Present RevenueCat hosted paywall ─────────────────────
+// Uses RevenueCatUI from react-native-purchases-ui (v10+ API)
 
 export async function presentPaywall(): Promise<boolean> {
   try {
-    const paywallResult = await Purchases.presentPaywallIfNeeded();
-    // paywallResult is a CustomerInfo if purchase completed
-    if (paywallResult) {
-      await syncSubscription(paywallResult);
+    const result = await RevenueCatUI.presentPaywallIfNeeded({
+      requiredEntitlementIdentifier: ENTITLEMENT_ID,
+    });
+    if (result === 'PURCHASED' || result === 'RESTORED') {
+      const info = await Purchases.getCustomerInfo();
+      await syncSubscription(info);
+      return true;
     }
-    return true;
+    return false;
   } catch (error: any) {
-    // If there's no paywall configured, presentPaywallIfNeeded
-    // throws or returns false depending on the SDK version
-    if (
-      error?.code === 'RC_PAYWALL_NOT_FOUND' ||
-      error?.userCancelled
-    ) {
+    if (error?.userCancelled) {
       return false;
     }
     throw error;
@@ -128,17 +118,10 @@ export async function presentPaywall(): Promise<boolean> {
 }
 
 // ─── Present Customer Center (subscription management) ─────
-//
-// Customer Center lets users manage their subscription:
-// - See current plan
-// - Upgrade / downgrade
-// - Cancel subscription
-// - Restore purchases
-// All from a native RevenueCat UI, no custom code needed.
-// ───────────────────────────────────────────────────────────
+// Native RevenueCat UI for managing subscription
 
 export async function presentCustomerCenter(): Promise<void> {
-  await Purchases.presentCustomerCenter();
+  await RevenueCatUI.presentCustomerCenter();
 }
 
 // ─── Get customer info (detailed) ──────────────────────────
@@ -154,7 +137,7 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
 // ─── Get formatted pricing for display ─────────────────────
 
 export function getPriceString(pkg: PurchasesPackage): string {
-  return pkg.product.priceString; // e.g. "$2.99"
+  return pkg.product.priceString;
 }
 
 export function getIntroPriceString(pkg: PurchasesPackage): string | null {

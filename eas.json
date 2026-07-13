@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 14.0.0"
+    "version": ">= 14.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -14,9 +15,6 @@
       "distribution": "internal"
     },
     "production": {
-      "ios": {
-        "ascAppId": "6790571863"
-      },
       "autoIncrement": true
     }
   },

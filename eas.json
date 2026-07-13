@@ -10,7 +10,8 @@
     },
     "preview": {
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "latest"
       },
       "distribution": "internal",
       "credentialsSource": "remote"

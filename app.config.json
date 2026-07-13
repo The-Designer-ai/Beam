@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Beam",
+    "name": "Beam - Screen Casting",
     "slug": "beam",
     "version": "1.0.0",
     "orientation": "default",
@@ -12,7 +12,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.beam.app",
+      "bundleIdentifier": "com.beam.stream",
       "infoPlist": {
         "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
         "NSCameraUsageDescription": "Beam needs camera access for video streaming.",
@@ -40,7 +40,7 @@
         {
           "appleTeamId": "4L4WKW92B5",
           "extensionName": "BeamBroadcast",
-          "extensionBundleIdentifier": "com.beam.app.broadcast"
+          "extensionBundleIdentifier": "com.beam.stream.broadcast"
         }
       ],
       "./modules/beam-nearby/withBeamNearby"

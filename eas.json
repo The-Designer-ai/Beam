@@ -15,7 +15,7 @@
     },
     "production": {
       "ios": {
-        "ascAppId": "REPLACE_WITH_ASC_APP_ID"
+        "ascAppId": "6790571863"
       },
       "autoIncrement": true
     }
@@ -23,7 +23,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "REPLACE_WITH_ASC_APP_ID",
+        "ascAppId": "6790571863",
         "appleTeamId": "4L4WKW92B5"
       }
     }

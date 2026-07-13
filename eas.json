@@ -27,6 +27,7 @@
         "betaBuildGroupName": "Testers"
       }
     },
+    "production": {
       "ios": {
         "ascAppId": "6790571863",
         "appleTeamId": "4L4WKW92B5"

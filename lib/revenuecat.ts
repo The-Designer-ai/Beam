@@ -29,8 +29,9 @@ export const PRODUCT_IDS = {
 // ─── Configure RevenueCat SDK ─────────────────────────────
 
 export async function initRevenueCat(userId?: string): Promise<void> {
-  Purchases.configure({
-    apiKey: ***    appUserID: userId,
+  await Purchases.configure({
+    apiKey: API_KEY,
+    appUserID: userId,
   });
 
   // Enable automatic paywall presentation

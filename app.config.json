@@ -22,9 +22,10 @@
       },
       "entitlements": {
         "com.apple.developer.replay-kit-broadcast": true,
-        "com.apple.developer.avfoundation.picture-in-picture": true
+        "com.apple.developer.avfoundation.picture-in-picture": true,
+        "com.apple.security.application-groups": ["group.com.beam.stream"]
       },
-      "buildNumber": "3"
+      "buildNumber": "8"
     },
     "plugins": [
       "expo-router",
@@ -34,7 +35,7 @@
         {
           "appleTeamId": "4L4WKW92B5",
           "extensionName": "BeamBroadcast",
-          "extensionBundleIdentifier": "com.beam.stream.broadcast"
+          "extensionBundleIdentifier": "com.beam.stream.BeamBroadcast"
         }
       ],
       "./modules/beam-nearby/withBeamNearby"

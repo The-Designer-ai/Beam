@@ -28,7 +28,11 @@
         "com.apple.developer.replay-kit-broadcast": true,
         "com.apple.developer.avfoundation.picture-in-picture": true
       },
+<<<<<<< Updated upstream
       "buildNumber": "2"
+=======
+      "buildNumber": "3"
+>>>>>>> Stashed changes
     },
     "plugins": [
       "expo-router",
@@ -54,6 +58,9 @@
         "projectId": "fc0ce84c-0039-46f7-8d50-b0b212036a3c"
       }
     },
-    "owner": "the_designer"
+    "owner": "the_designer",
+    "android": {
+      "package": "com.beam.stream"
+    }
   }
 }

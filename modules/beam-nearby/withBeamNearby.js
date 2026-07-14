@@ -7,7 +7,7 @@
 //   - NSNearbyInteractionAllowOnceUsageDescription (just in case)
 // ───────────────────────────────────────────────────────────
 
-const { withInfoPlist } = require('@expo/config-plugins');
+const { withInfoPlist } = require('expo/config-plugins');
 
 function withBeamNearby(config) {
   return withInfoPlist(config, (config) => {

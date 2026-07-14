@@ -1,5 +1,17 @@
+diff --git a/node_modules/@videosdk.live/expo-ios-screen-share/build/static/VideosdkRPK.swift b/node_modules/@videosdk.live/expo-ios-screen-share/build/static/VideosdkRPK.swift
+index 7ad9462..e7c3d01 100644
+--- a/node_modules/@videosdk.live/expo-ios-screen-share/build/static/VideosdkRPK.swift
++++ b/node_modules/@videosdk.live/expo-ios-screen-share/build/static/VideosdkRPK.swift
+@@ -2,6 +2,7 @@ import Foundation
+ import ReplayKit
+ import Photos
+ import UIKit
++import React
+ 
+ @objc(VideosdkRPK)
+ class VideosdkRPK: RCTEventEmitter {
 diff --git a/node_modules/@videosdk.live/expo-ios-screen-share/build/withIosBroadcastExtension.js b/node_modules/@videosdk.live/expo-ios-screen-share/build/withIosBroadcastExtension.js
-index 3ebc704..a638c69 100644
+index 3ebc704..5a25b8d 100644
 --- a/node_modules/@videosdk.live/expo-ios-screen-share/build/withIosBroadcastExtension.js
 +++ b/node_modules/@videosdk.live/expo-ios-screen-share/build/withIosBroadcastExtension.js
 @@ -311,7 +311,7 @@ const addXCConfigurationList = (proj, { extensionBundleIdentifier, currentProjec

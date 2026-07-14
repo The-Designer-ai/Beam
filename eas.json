@@ -17,6 +17,9 @@
       "credentialsSource": "remote"
     },
     "production": {
+      "ios": {
+        "image": "latest"
+      },
       "autoIncrement": true
     }
   },

@@ -9,7 +9,8 @@
     "build:preview": "eas build --platform ios --profile preview",
     "build:prod": "eas build --platform ios --profile production",
     "submit": "eas build --platform ios --profile production --auto-submit",
-    "android": "expo run:android"
+    "android": "expo run:android",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
@@ -45,6 +46,7 @@
     "@types/react": "~18.3.0",
     "@types/uuid": "^10.0.0",
     "eas-cli": "^21.0.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.6.0"
   },
   "private": true

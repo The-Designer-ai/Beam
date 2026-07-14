@@ -28,7 +28,7 @@
           "group.com.beam.stream.appgroup"
         ]
       },
-      "buildNumber": "13"
+      "buildNumber": "14"
     },
     "plugins": [
       "expo-router",
@@ -42,7 +42,6 @@
           "extensionBundleIdentifier": "com.beam.stream.BeamBroadcast"
         }
       ],
-      "./plugins/withIosDeploymentTarget",
       "./modules/beam-nearby/withBeamNearby"
     ],
     "experiments": {

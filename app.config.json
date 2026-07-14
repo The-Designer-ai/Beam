@@ -18,21 +18,13 @@
         "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
         "NSCameraUsageDescription": "Beam needs camera access for video streaming.",
         "NSMicrophoneUsageDescription": "Beam needs microphone access for audio in screen sharing.",
-        "UIBackgroundModes": [
-          "audio",
-          "remote-notification",
-          "audio-video-pip"
-        ]
+        "UIBackgroundModes": ["audio", "remote-notification", "audio-video-pip"]
       },
       "entitlements": {
         "com.apple.developer.replay-kit-broadcast": true,
         "com.apple.developer.avfoundation.picture-in-picture": true
       },
-<<<<<<< Updated upstream
-      "buildNumber": "2"
-=======
       "buildNumber": "3"
->>>>>>> Stashed changes
     },
     "plugins": [
       "expo-router",

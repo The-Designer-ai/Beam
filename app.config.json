@@ -28,7 +28,7 @@
           "group.com.beam.stream.appgroup"
         ]
       },
-      "buildNumber": "9"
+      "buildNumber": "11"
     },
     "plugins": [
       "expo-router",
@@ -37,6 +37,7 @@
         "@videosdk.live/expo-ios-screen-share",
         {
           "appleTeamId": "4L4WKW92B5",
+          "bundleId": "com.beam.stream",
           "extensionName": "BeamBroadcast",
           "extensionBundleIdentifier": "com.beam.stream.BeamBroadcast"
         }

@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beam.stream",
+      "deploymentTarget": "16.4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
@@ -25,7 +26,7 @@
           "group.com.beam.stream.appgroup"
         ]
       },
-      "buildNumber": "18"
+      "buildNumber": "19"
     },
     "plugins": [
       "expo-router",

@@ -7,7 +7,7 @@ index 3ebc704..a638c69 100644
          INFOPLIST_KEY_CFBundleDisplayName: `${extensionName}`,
          INFOPLIST_KEY_NSHumanReadableCopyright: (0, utils_1.quoted)(''),
 -        IPHONEOS_DEPLOYMENT_TARGET: '14.0',
-+        IPHONEOS_DEPLOYMENT_TARGET: '15.1',
++        IPHONEOS_DEPLOYMENT_TARGET: '16.4',
          LD_RUNPATH_SEARCH_PATHS: (0, utils_1.quoted)('$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'),
          MARKETING_VERSION: marketingVersion,
          MTL_FAST_MATH: 'YES',
@@ -16,7 +16,7 @@ index 3ebc704..a638c69 100644
      // update other build properties
      proj.updateBuildProperty('ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES', 'YES', null, proj.getFirstTarget().firstTarget.name);
 -    proj.updateBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', '14.0');
-+    proj.updateBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', '15.1');
++    proj.updateBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', '16.4');
      return xCConfigurationList;
  };
  const addProductFile = (proj, extensionName, groupName) => {

@@ -16,6 +16,7 @@
     "@react-native-community/netinfo": "11.4.1",
     "@videosdk.live/expo-ios-screen-share": "^0.0.3",
     "expo": "~52.0.0",
+    "expo-asset": "^57.0.3",
     "expo-blur": "14.0.3",
     "expo-constants": "~17.0.0",
     "expo-dev-client": "~5.0.20",

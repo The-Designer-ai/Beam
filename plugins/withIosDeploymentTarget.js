@@ -1,11 +1,19 @@
-const { withXcodeProject } = require('@expo/config-plugins');
+const {
+  withPodfileProperties,
+  withXcodeProject,
+} = require('@expo/config-plugins');
 
 const DEFAULT_DEPLOYMENT_TARGET = '15.1';
 
 function withIosDeploymentTarget(config, props = {}) {
   const deploymentTarget = props.deploymentTarget || DEFAULT_DEPLOYMENT_TARGET;
 
-  return withXcodeProject(config, (config) => {
+  config = withPodfileProperties(config, (config) => {
+    config.modResults['ios.deploymentTarget'] = deploymentTarget;
+    return config;
+  });
+
+  config = withXcodeProject(config, (config) => {
     const buildConfigurations =
       config.modResults.pbxXCBuildConfigurationSection();
 
@@ -22,6 +30,8 @@ function withIosDeploymentTarget(config, props = {}) {
 
     return config;
   });
+
+  return config;
 }
 
 module.exports = withIosDeploymentTarget;

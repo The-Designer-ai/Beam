@@ -28,7 +28,7 @@
           "group.com.beam.stream.appgroup"
         ]
       },
-      "buildNumber": "12"
+      "buildNumber": "13"
     },
     "plugins": [
       "expo-router",

@@ -168,6 +168,9 @@ export default function DevicesScreen() {
         onSuccess: () => {
           setStatusText('Domain added!');
         },
+        onTimeout: () => {
+          setStatusText('No nearby domains found.');
+        },
         onError: (error) => {
           setStatusText(`Error: ${error.message}`);
         },

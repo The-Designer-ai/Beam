@@ -36,14 +36,17 @@ export async function shareDomainViaNearby(
   domainToken: string,
   callbacks: DomainShareCallbacks,
 ): Promise<DomainShareResult> {
+  let settledResult: DomainShareResult | null = null;
+
   // 1. Set up native event listeners
   const cleanup = nearby.setupNativeListeners();
   nearby.on({
     onPeerFound: (peer) => callbacks.onPeerFound(peer),
     onPeerLost: (name) => callbacks.onPeerLost(name),
     onDomainReceived: (token, from) => {
+      settledResult = { method: 'nearby', domainToken: token, from };
       callbacks.onDomainReceived(token, from);
-      callbacks.onSuccess({ method: 'nearby', domainToken: token, from });
+      callbacks.onSuccess(settledResult);
       cleanup();
     },
     onStateChange: (state, detail) => callbacks.onStateChange(state, detail),
@@ -64,7 +67,10 @@ export async function shareDomainViaNearby(
 
       // If someone connects, cancel the timeout
       nearby.on({
-        onDomainReceived: (_token, _from) => {
+        onDomainReceived: (token, from) => {
+          settledResult = { method: 'nearby', domainToken: token, from };
+          callbacks.onDomainReceived(token, from);
+          callbacks.onSuccess(settledResult);
           clearTimeout(timeout);
           resolve();
         },
@@ -79,6 +85,10 @@ export async function shareDomainViaNearby(
 
     // 4. If domain was already received, we're done
     // Otherwise offer invite link as fallback
+    if (settledResult) {
+      return settledResult;
+    }
+
     if (nearby.state === 'connected') {
       return { method: 'nearby' };
     }

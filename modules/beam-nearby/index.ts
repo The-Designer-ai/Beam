@@ -3,8 +3,18 @@
 // Wraps the native Swift BeamNearbyModule for Expo
 // ───────────────────────────────────────────────────────────
 
-import { requireNativeModule } from 'expo-modules-core';
-import { EventSubscription } from 'expo-modules-core';
+import { requireNativeModule } from 'expo';
+
+type EventSubscription = {
+  remove(): void;
+};
+
+type BeamNearbyEvents = {
+  onPeerFound: (event: NearbyPeer) => void;
+  onPeerLost: (event: { displayName: string }) => void;
+  onDomainReceived: (event: { domainToken: string; from: string }) => void;
+  onStateChange: (event: { state: NearbyState; peer?: string; message?: string }) => void;
+};
 
 interface BeamNearbyNativeModule {
   startBroadcasting(displayName: string, domainToken: string): Promise<void>;
@@ -13,7 +23,10 @@ interface BeamNearbyNativeModule {
   sendDomain(domainToken: string): Promise<void>;
   stop(): Promise<void>;
   getDiscoveredPeers(): Promise<string[]>;
-  addListener(eventName: string): EventSubscription;
+  addListener<EventName extends keyof BeamNearbyEvents>(
+    eventName: EventName,
+    listener: BeamNearbyEvents[EventName],
+  ): EventSubscription;
 }
 
 const Native = requireNativeModule<BeamNearbyNativeModule>('BeamNearby');
@@ -84,15 +97,20 @@ class BeamNearby {
 
   setupNativeListeners(): () => void {
     const subs: EventSubscription[] = [
-      Native.addListener('onPeerFound'),
-      Native.addListener('onPeerLost'),
-      Native.addListener('onDomainReceived'),
-      Native.addListener('onStateChange'),
+      Native.addListener('onPeerFound', (peer) => {
+        this.callbacks.onPeerFound?.(peer);
+      }),
+      Native.addListener('onPeerLost', ({ displayName }) => {
+        this.callbacks.onPeerLost?.(displayName);
+      }),
+      Native.addListener('onDomainReceived', ({ domainToken, from }) => {
+        this.callbacks.onDomainReceived?.(domainToken, from);
+      }),
+      Native.addListener('onStateChange', ({ state, peer, message }) => {
+        this._state = state;
+        this.callbacks.onStateChange?.(state, message ?? peer);
+      }),
     ];
-
-    // Wire each subscription to the appropriate handler
-    // Expo Modules API dispatches events with the event name as the first arg
-    // and the payload as the data property
 
     return () => {
       for (const sub of subs) {

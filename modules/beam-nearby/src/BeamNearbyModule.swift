@@ -19,11 +19,14 @@ import ExpoModulesCore
 private let kServiceType = "_beam-domain._tcp"
 
 public class BeamNearbyModule: Module {
-  private var session: MCSession?
+  fileprivate var session: MCSession?
   private var advertiser: MCNearbyServiceAdvertiser?
   private var browser: MCNearbyServiceBrowser?
+  private lazy var advertiserDelegate = BeamNearbyAdvertiserDelegate(module: self)
+  private lazy var browserDelegate = BeamNearbyBrowserDelegate(module: self)
+  private lazy var sessionDelegate = BeamNearbySessionDelegate(module: self)
   private var localPeerID: MCPeerID?
-  private var discoveredPeers: [MCPeerID] = []
+  fileprivate var discoveredPeers: [MCPeerID] = []
   private var hasEventListeners = false
 
   // Callback storage
@@ -53,7 +56,7 @@ public class BeamNearbyModule: Module {
         discoveryInfo: ["domain": domainToken],
         serviceType: kServiceType
       )
-      self.advertiser?.delegate = self
+      self.advertiser?.delegate = self.advertiserDelegate
       self.advertiser?.startAdvertisingPeer()
     }
 
@@ -65,10 +68,10 @@ public class BeamNearbyModule: Module {
       let peerID = MCPeerID(displayName: "\(displayName) - Beam")
       self.localPeerID = peerID
       self.session = MCSession(peer: peerID, securityIdentity: nil, encryptionPreference: .required)
-      self.session?.delegate = self
+      self.session?.delegate = self.sessionDelegate
 
       self.browser = MCNearbyServiceBrowser(peer: peerID, serviceType: kServiceType)
-      self.browser?.delegate = self
+      self.browser?.delegate = self.browserDelegate
       self.browser?.startBrowsingForPeers()
     }
 
@@ -130,55 +133,74 @@ public class BeamNearbyModule: Module {
 
 // ─── MCNearbyServiceAdvertiserDelegate ──────────────────────
 
-extension BeamNearbyModule: MCNearbyServiceAdvertiserDelegate {
-  public func advertiser(
+private class BeamNearbyAdvertiserDelegate: NSObject, MCNearbyServiceAdvertiserDelegate {
+  weak var module: BeamNearbyModule?
+
+  init(module: BeamNearbyModule) {
+    self.module = module
+  }
+
+  func advertiser(
     _ advertiser: MCNearbyServiceAdvertiser,
     didReceiveInvitationFromPeer peerID: MCPeerID,
     withContext context: Data?,
     invitationHandler: @escaping (Bool, MCSession?) -> Void
   ) {
     // Auto-accept the connection from scanning devices
-    invitationHandler(true, self.session)
-    self.sendEvent("onStateChange", ["state": "connected", "peer": peerID.displayName])
+    invitationHandler(true, module?.session)
+    module?.sendEvent("onStateChange", ["state": "connected", "peer": peerID.displayName])
   }
 
-  public func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: any Error) {
-    self.sendEvent("onStateChange", ["state": "error", "message": error.localizedDescription])
+  func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: any Error) {
+    module?.sendEvent("onStateChange", ["state": "error", "message": error.localizedDescription])
   }
 }
 
 // ─── MCNearbyServiceBrowserDelegate ────────────────────────
 
-extension BeamNearbyModule: MCNearbyServiceBrowserDelegate {
-  public func browser(
+private class BeamNearbyBrowserDelegate: NSObject, MCNearbyServiceBrowserDelegate {
+  weak var module: BeamNearbyModule?
+
+  init(module: BeamNearbyModule) {
+    self.module = module
+  }
+
+  func browser(
     _ browser: MCNearbyServiceBrowser,
     foundPeer peerID: MCPeerID,
     withDiscoveryInfo info: [String: String]?
   ) {
-    guard !discoveredPeers.contains(where: { $0.displayName == peerID.displayName }) else { return }
-    discoveredPeers.append(peerID)
+    guard let module else { return }
+    guard !module.discoveredPeers.contains(where: { $0.displayName == peerID.displayName }) else { return }
+    module.discoveredPeers.append(peerID)
 
     let domainHint = info?["domain"] ?? "unknown"
-    self.sendEvent("onPeerFound", [
+    module.sendEvent("onPeerFound", [
       "displayName": peerID.displayName,
       "domainToken": domainHint
     ])
   }
 
-  public func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
-    discoveredPeers.removeAll(where: { $0.displayName == peerID.displayName })
-    self.sendEvent("onPeerLost", ["displayName": peerID.displayName])
+  func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+    module?.discoveredPeers.removeAll(where: { $0.displayName == peerID.displayName })
+    module?.sendEvent("onPeerLost", ["displayName": peerID.displayName])
   }
 
-  public func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: any Error) {
-    self.sendEvent("onStateChange", ["state": "error", "message": error.localizedDescription])
+  func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: any Error) {
+    module?.sendEvent("onStateChange", ["state": "error", "message": error.localizedDescription])
   }
 }
 
 // ─── MCSessionDelegate ─────────────────────────────────────
 
-extension BeamNearbyModule: MCSessionDelegate {
-  public func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
+private class BeamNearbySessionDelegate: NSObject, MCSessionDelegate {
+  weak var module: BeamNearbyModule?
+
+  init(module: BeamNearbyModule) {
+    self.module = module
+  }
+
+  func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
     let stateStr: String
     switch state {
     case .connected:
@@ -194,28 +216,28 @@ extension BeamNearbyModule: MCSessionDelegate {
     @unknown default:
       stateStr = "unknown"
     }
-    self.sendEvent("onStateChange", ["state": stateStr, "peer": peerID.displayName])
+    module?.sendEvent("onStateChange", ["state": stateStr, "peer": peerID.displayName])
   }
 
-  public func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
+  func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
     guard let message = String(data: data, encoding: .utf8) else { return }
     if message == "REQUEST_DOMAIN" {
       // The other side is asking for our domain — handled upstream
       return
     }
     // Received a domain token from the broadcaster
-    self.sendEvent("onDomainReceived", ["domainToken": message, "from": peerID.displayName])
+    module?.sendEvent("onDomainReceived", ["domainToken": message, "from": peerID.displayName])
   }
 
-  public func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
+  func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
     // Unused for our data-transfer use case
   }
 
-  public func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
+  func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
     // Unused
   }
 
-  public func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: (any Error)?) {
+  func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: (any Error)?) {
     // Unused
   }
 }

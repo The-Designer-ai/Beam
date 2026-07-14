@@ -7,6 +7,19 @@ import {
 } from 'react-native-webrtc';
 import { SignalMessage } from '../types';
 
+type WebRTCSessionDescriptionInit = {
+  type: string | null;
+  sdp: string;
+};
+
+type IceCandidateEvent = { candidate: RTCIceCandidate | null };
+type TrackEvent = { streams: MediaStream[] };
+type PeerConnectionEventTarget = RTCPeerConnection & {
+  addEventListener(type: 'icecandidate', listener: (event: IceCandidateEvent) => void): void;
+  addEventListener(type: 'track', listener: (event: TrackEvent) => void): void;
+  addEventListener(type: 'connectionstatechange', listener: () => void): void;
+};
+
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -32,12 +45,9 @@ export class WebRTCManager {
 
   // ─── Create a PeerConnection (called by sender) ────────────────
 
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
+  async createOffer(): Promise<WebRTCSessionDescriptionInit> {
     this.pc = this.createPeerConnection();
-    this.localStream = await mediaDevices.getDisplayMedia({
-      video: { width: 1920, height: 1080, frameRate: 30 },
-      audio: true,
-    });
+    this.localStream = await mediaDevices.getDisplayMedia();
 
     this.localStream.getTracks().forEach((track) => {
       this.pc?.addTrack(track, this.localStream!);
@@ -53,21 +63,18 @@ export class WebRTCManager {
 
   // ─── Handle incoming offer (called by receiver) ────────────────
 
-  async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+  async handleOffer(offer: WebRTCSessionDescriptionInit): Promise<WebRTCSessionDescriptionInit> {
     this.pc = this.createPeerConnection();
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-    const answer = await this.pc.createAnswer({
-      offerToReceiveVideo: true,
-      offerToReceiveAudio: true,
-    });
+    const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
     return answer;
   }
 
   // ─── Handle incoming answer (called by sender) ─────────────────
 
-  async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
+  async handleAnswer(answer: WebRTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) throw new Error('No peer connection');
     await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
   }
@@ -100,23 +107,24 @@ export class WebRTCManager {
     const pc = new RTCPeerConnection({
       iceServers: ICE_SERVERS,
     });
+    const eventTarget = pc as PeerConnectionEventTarget;
 
-    pc.onicecandidate = (event) => {
+    eventTarget.addEventListener('icecandidate', (event) => {
       if (event.candidate) {
         this.callbacks.onError(new Error('ICE_CANDIDATE')); // Signal to parent
       }
-    };
+    });
 
-    pc.ontrack = (event) => {
+    eventTarget.addEventListener('track', (event) => {
       if (event.streams && event.streams[0]) {
         this.callbacks.onStream(event.streams[0]);
       }
-    };
+    });
 
-    pc.onconnectionstatechange = () => {
+    eventTarget.addEventListener('connectionstatechange', () => {
       const state = pc.connectionState as ConnectionState;
       this.callbacks.onState(state);
-    };
+    });
 
     return pc;
   }

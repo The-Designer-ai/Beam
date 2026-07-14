@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { colors, radius, shadows, glass } from '../lib/theme';
 
@@ -7,7 +7,7 @@ interface GlassProps {
   children: React.ReactNode;
   intensity?: number;
   tint?: 'light' | 'dark' | 'extraLight';
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   noPadding?: boolean;
 }
 
@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glassBg,
   },
   sheen: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.glassSheen,
     opacity: 0.3,
   },

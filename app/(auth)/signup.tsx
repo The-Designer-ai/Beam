@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,8 @@ import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
+import { AppIcon } from '../../components/AppIcon';
+import { AppTextField } from '../../components/AppTextField';
 import { colors, typography, spacing } from '../../lib/theme';
 import { storeUser, storeAuthToken } from '../../lib/store';
 
@@ -66,40 +67,36 @@ export default function SignupScreen() {
             <Text style={[typography.body, styles.tagline]}>Join Beam and start casting.</Text>
 
             <Glass style={styles.form} contentStyle={styles.formContent}>
-              <TextInput
-                style={styles.input}
+              <AppTextField
                 placeholder="Display Name"
-                placeholderTextColor={colors.textTertiary}
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
-                accessibilityLabel="Display name"
               />
               <View style={styles.divider} />
-              <TextInput
-                style={styles.input}
+              <AppTextField
                 placeholder="Email"
-                placeholderTextColor={colors.textTertiary}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                autoComplete="email"
-                accessibilityLabel="Email"
               />
               <View style={styles.divider} />
-              <TextInput
-                style={styles.input}
+              <AppTextField
                 placeholder="Password"
-                placeholderTextColor={colors.textTertiary}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="new-password"
-                accessibilityLabel="Password"
+                secure
               />
 
-              <BeamButton title="Create Account" onPress={handleSignup} loading={loading} style={styles.signupButton} />
+              <BeamButton
+                title="Create Account"
+                onPress={handleSignup}
+                loading={loading}
+                icon={<AppIcon ios="person.badge.plus" android="person_add" size={18} color={colors.textInverse} />}
+                iosSystemImage="person.badge.plus"
+                style={styles.signupButton}
+              />
             </Glass>
 
             <View style={styles.footer}>
@@ -122,7 +119,6 @@ const styles = StyleSheet.create({
   tagline: { color: colors.textSecondary, marginBottom: spacing.xxxl, textAlign: 'center' },
   form: { width: '100%', maxWidth: 520, marginBottom: spacing.xxl },
   formContent: { padding: spacing.lg },
-  input: { height: 52, paddingHorizontal: spacing.md, fontSize: 17, color: colors.text },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator, marginHorizontal: spacing.md },
   signupButton: { marginTop: spacing.lg, width: '100%' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' },

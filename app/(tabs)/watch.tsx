@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, Platform, AppState } from 'react-native';
+import { View, Text, StyleSheet, Alert, Platform, AppState } from 'react-native';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
+import { AppIcon } from '../../components/AppIcon';
+import { RoomCodeField } from '../../components/RoomCodeField';
 import { colors, typography, spacing, radius } from '../../lib/theme';
 
 // ═══ PiP: RTCPIPView renders the stream and supports PiP natively ═══
@@ -93,32 +95,27 @@ export default function WatchScreen() {
       {!isWatching ? (
         <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
           <Glass style={styles.joinCard} contentStyle={styles.joinCardContent}>
-            <Text style={[typography.title3, { marginBottom: spacing.md }]}>Join a Room</Text>
-            <Text style={[typography.subhead, { color: colors.textSecondary, marginBottom: spacing.lg }]}>
+            <Text style={[typography.title2, styles.centerText]}>Join a Room</Text>
+            <Text style={[typography.subhead, styles.joinDescription]}>
               Enter the 6-character code shared by the sender.
             </Text>
 
-            <TextInput
-              style={styles.codeInput}
-              placeholder="Enter room code"
-              placeholderTextColor={colors.textTertiary}
+            <RoomCodeField
               value={roomCode}
-              onChangeText={(value) => setRoomCode(value.toUpperCase())}
-              autoCapitalize="characters"
-              maxLength={6}
-              returnKeyType="join"
-              onSubmitEditing={joinRoom}
-              accessibilityLabel="Room code"
+              onChangeText={setRoomCode}
+              onSubmit={joinRoom}
             />
 
             <BeamButton
               title="Join Room"
               onPress={joinRoom}
+              icon={<AppIcon ios="play.circle.fill" android="play_circle" size={19} color={colors.textInverse} />}
+              iosSystemImage="play.circle.fill"
               style={styles.joinButton}
             />
           </Glass>
 
-          <Text style={[typography.subhead, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.xxl }]}>
+          <Text style={[typography.footnote, styles.watchHint]}>
             Or wait for someone to cast to your device directly from their Cast tab.
           </Text>
         </Animated.View>
@@ -143,9 +140,7 @@ export default function WatchScreen() {
               </View>
             ) : (
               <>
-                <View style={styles.receivingIcon}>
-                  <Text style={{ fontSize: 48 }}>📺</Text>
-                </View>
+                <AppIcon ios="tv" android="tv" size={52} color={colors.primary} weight="medium" />
                 <Text style={[typography.title2, { color: colors.text, textAlign: 'center', marginTop: spacing.lg }]}>
                   {status}
                 </Text>
@@ -162,6 +157,8 @@ export default function WatchScreen() {
                 title={pipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
                 onPress={togglePip}
                 variant="secondary"
+                icon={<AppIcon ios="pip" android="picture_in_picture_alt" size={18} color={colors.primary} />}
+                iosSystemImage="pip"
                 style={styles.pipButton}
               />
             )}
@@ -170,6 +167,10 @@ export default function WatchScreen() {
               title="Disconnect"
               onPress={leaveRoom}
               variant="secondary"
+              icon={<AppIcon ios="xmark.circle" android="cancel" size={18} color={colors.error} />}
+              iosSystemImage="xmark.circle"
+              role="destructive"
+              textStyle={{ color: colors.error }}
               style={styles.leaveButton}
             />
           </Glass>
@@ -193,31 +194,40 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.xxl,
     justifyContent: 'center',
+    paddingBottom: 72,
   },
   joinCard: {
     width: '100%',
-    maxWidth: 560,
+    maxWidth: 480,
     alignSelf: 'center',
   },
   joinCardContent: {
-    padding: spacing.xxl,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.xxxl,
     alignItems: 'center',
     width: '100%',
   },
-  codeInput: {
-    width: '100%',
-    height: 56,
-    fontSize: 28,
-    letterSpacing: 0,
-    textAlign: 'center',
-    backgroundColor: colors.bgSecondary,
-    borderRadius: radius.md,
+  centerText: {
     color: colors.text,
-    marginBottom: spacing.lg,
-    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  joinDescription: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
   },
   joinButton: {
     width: '100%',
+    marginTop: spacing.lg,
+  },
+  watchHint: {
+    color: colors.textTertiary,
+    textAlign: 'center',
+    maxWidth: 360,
+    alignSelf: 'center',
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   receivingCard: {
     width: '100%',
@@ -228,14 +238,6 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     alignItems: 'center',
     width: '100%',
-  },
-  receivingIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   leaveButton: {
     marginTop: spacing.lg,

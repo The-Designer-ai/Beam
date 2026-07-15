@@ -1,11 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, Platform } from 'react-native';
+import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { DeviceCard } from '../../components/DeviceCard';
 import { BeamButton } from '../../components/BeamButton';
+import { AppIcon } from '../../components/AppIcon';
 import { colors, typography, spacing, radius } from '../../lib/theme';
 import { Device } from '../../types';
 import { getStoredDevices, storeDevices } from '../../lib/store';
@@ -250,15 +251,19 @@ export default function DevicesScreen() {
             {!showNearbyUI ? (
               <Glass style={styles.nearbyActions}>
                 <BeamButton
-                  title={Platform.OS === 'ios' ? "📡 Share My Domain" : "Share Domain"}
+                  title="Share My Domain"
                   onPress={handleShareDomain}
+                  icon={<AppIcon ios="square.and.arrow.up" android="share" size={18} color={colors.textInverse} />}
+                  iosSystemImage="square.and.arrow.up"
                   variant="primary"
                   style={styles.nearbyButton}
                   disabled={!isNearbySupported()}
                 />
                 <BeamButton
-                  title={Platform.OS === 'ios' ? "🔍 Scan for Nearby" : "Scan Nearby"}
+                  title="Scan for Nearby"
                   onPress={handleScanNearby}
+                  icon={<AppIcon ios="viewfinder" android="search" size={18} color={colors.primary} />}
+                  iosSystemImage="viewfinder"
                   variant="secondary"
                   style={styles.nearbyButton}
                   disabled={!isNearbySupported()}
@@ -267,14 +272,22 @@ export default function DevicesScreen() {
             ) : (
               /* ─── Nearby Active UI ───────────────────────────── */
               <Glass style={styles.nearbyActive}>
-                <Text style={[typography.headline, { color: colors.primary, textAlign: 'center', marginBottom: spacing.sm }]}>
-                  {nearbyState === 'broadcasting' && '📡 Broadcasting Domain'}
-                  {nearbyState === 'scanning' && '🔍 Scanning...'}
-                  {nearbyState === 'connecting' && '🔄 Connecting...'}
-                  {nearbyState === 'connected' && '✅ Connected!'}
-                  {nearbyState === 'idle' && 'Nearby'}
-                  {nearbyState === 'error' && '❌ Error'}
-                </Text>
+                <View style={styles.nearbyStatusTitle}>
+                  <AppIcon
+                    ios={nearbyState === 'connected' ? 'checkmark.circle.fill' : nearbyState === 'error' ? 'exclamationmark.triangle.fill' : nearbyState === 'scanning' ? 'viewfinder' : 'antenna.radiowaves.left.and.right'}
+                    android={nearbyState === 'connected' ? 'check_circle' : nearbyState === 'error' ? 'error' : nearbyState === 'scanning' ? 'search' : 'cell_tower'}
+                    size={22}
+                    color={nearbyState === 'error' ? colors.error : nearbyState === 'connected' ? colors.success : colors.primary}
+                  />
+                  <Text style={[typography.headline, styles.nearbyStatusText]}>
+                    {nearbyState === 'broadcasting' && 'Broadcasting Domain'}
+                    {nearbyState === 'scanning' && 'Scanning'}
+                    {nearbyState === 'connecting' && 'Connecting'}
+                    {nearbyState === 'connected' && 'Connected'}
+                    {nearbyState === 'idle' && 'Nearby'}
+                    {nearbyState === 'error' && 'Error'}
+                  </Text>
+                </View>
 
                 <Text style={[typography.subhead, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md }]}>
                   {statusText}
@@ -282,9 +295,10 @@ export default function DevicesScreen() {
 
                 {/* Spinner / state indicator */}
                 {(nearbyState === 'broadcasting' || nearbyState === 'scanning' || nearbyState === 'connecting') && (
-                  <Text style={[typography.caption1, { color: colors.textTertiary, textAlign: 'center', marginBottom: spacing.md }]}>
-                    Keep the devices near each other...
-                  </Text>
+                  <View style={styles.progressRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[typography.caption1, styles.progressText]}>Keep the devices near each other</Text>
+                  </View>
                 )}
 
                 {/* Discovered peers list (scanning mode) */}
@@ -295,6 +309,8 @@ export default function DevicesScreen() {
                         key={peer.displayName}
                         title={`Accept domain from ${peer.displayName}`}
                         onPress={() => handleAcceptPeer(peer)}
+                        icon={<AppIcon ios="person.badge.plus" android="person_add" size={18} color={colors.textInverse} />}
+                        iosSystemImage="person.badge.plus"
                         variant="primary"
                         style={styles.peerButton}
                       />
@@ -313,6 +329,7 @@ export default function DevicesScreen() {
                   title="Cancel"
                   onPress={handleCancelNearby}
                   variant="secondary"
+                  role="cancel"
                   style={styles.cancelButton}
                 />
               </Glass>
@@ -321,13 +338,15 @@ export default function DevicesScreen() {
         }
       />
 
-      <Glass style={styles.fab}>
+      <View style={styles.fab}>
         <BeamButton
           title="Create Room"
           onPress={() => router.push('/(tabs)/cast')}
+          icon={<AppIcon ios="plus" android="add" size={18} color={colors.textInverse} />}
+          iosSystemImage="plus"
           style={styles.fabButton}
         />
-      </Glass>
+      </View>
     </SafeAreaView>
   );
 }
@@ -356,29 +375,46 @@ const styles = StyleSheet.create({
     bottom: 100,
     left: spacing.xxl,
     right: spacing.xxl,
-    padding: 4,
-    borderRadius: 16,
   },
   fabButton: {
     width: '100%',
   },
   // ── Nearby Section ───────────────────────────────────────
   nearbySection: {
-    marginTop: spacing.xxl,
-    paddingTop: spacing.lg,
+    marginTop: spacing.xxxl,
+    paddingTop: spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.separator,
   },
   nearbyActions: {
     padding: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   nearbyButton: {
     width: '100%',
   },
   nearbyActive: {
-    padding: spacing.lg,
+    padding: spacing.xl,
     alignItems: 'center',
+  },
+  nearbyStatusTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  nearbyStatusText: {
+    color: colors.primary,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  progressText: {
+    color: colors.textTertiary,
   },
   peersList: {
     width: '100%',

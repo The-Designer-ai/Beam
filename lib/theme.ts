@@ -3,8 +3,8 @@ import { Platform } from 'react-native';
 // ─── Color Palette ────────────────────────────────────────────────
 export const colors = {
   // Backgrounds
-  bg: '#FFFFFF',
-  bgSecondary: '#F2F2F7',
+  bg: '#F2F2F7',
+  bgSecondary: '#FFFFFF',
   bgTertiary: '#E5E5EA',
 
   // Brand / primary
@@ -19,7 +19,7 @@ export const colors = {
   textInverse: '#FFFFFF',
 
   // Glass / material
-  glassBg: 'rgba(255, 255, 255, 0.6)',
+  glassBg: '#FFFFFF',
   glassBorder: 'rgba(255, 255, 255, 0.8)',
   glassShadow: 'rgba(0, 0, 0, 0.1)',
   glassSheen: 'rgba(255, 255, 255, 0.5)',

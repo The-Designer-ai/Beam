@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -12,9 +11,10 @@ import {
 import { router } from 'expo-router';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
+import { AppIcon } from '../../components/AppIcon';
+import { AppTextField } from '../../components/AppTextField';
 import { colors, typography, spacing } from '../../lib/theme';
 import { storeUser, storeAuthToken } from '../../lib/store';
 
@@ -66,36 +66,36 @@ export default function LoginScreen() {
             <Text style={[typography.body, styles.tagline]}>Cast your screen to any device.</Text>
 
             <Glass style={styles.form} contentStyle={styles.formContent}>
-              <TextInput
-                style={styles.input}
+              <AppTextField
                 placeholder="Email"
-                placeholderTextColor={colors.textTertiary}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                autoComplete="email"
-                accessibilityLabel="Email"
               />
               <View style={styles.divider} />
-              <TextInput
-                style={styles.input}
+              <AppTextField
                 placeholder="Password"
-                placeholderTextColor={colors.textTertiary}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="password"
-                accessibilityLabel="Password"
+                secure
               />
 
               <View style={styles.actions}>
-                <BeamButton title="Sign In" onPress={handleLogin} loading={loading} style={styles.button} />
+                <BeamButton
+                  title="Sign In"
+                  onPress={handleLogin}
+                  loading={loading}
+                  icon={<AppIcon ios="arrow.right.circle.fill" android="arrow_circle_right" size={18} color={colors.textInverse} />}
+                  iosSystemImage="arrow.right.circle.fill"
+                  style={styles.button}
+                />
                 <BeamButton
                   title="Continue with Apple"
                   onPress={() => Alert.alert('Coming Soon', 'Apple Sign-In is not connected yet.')}
                   variant="secondary"
-                  icon={<Ionicons name="logo-apple" size={18} color={colors.text} />}
+                  icon={<AppIcon ios="apple.logo" android="phone_iphone" size={18} color={colors.text} />}
+                  iosSystemImage="apple.logo"
                   style={styles.button}
                 />
               </View>
@@ -121,7 +121,6 @@ const styles = StyleSheet.create({
   tagline: { color: colors.textSecondary, marginBottom: spacing.xxxl, textAlign: 'center' },
   form: { width: '100%', maxWidth: 520, marginBottom: spacing.xxl },
   formContent: { padding: spacing.lg },
-  input: { height: 52, paddingHorizontal: spacing.md, fontSize: 17, color: colors.text },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator, marginHorizontal: spacing.md },
   actions: { marginTop: spacing.lg, gap: spacing.md },
   button: { width: '100%' },

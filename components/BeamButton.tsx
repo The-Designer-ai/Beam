@@ -4,8 +4,6 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  StyleProp,
-  ViewStyle,
   TextStyle,
 } from 'react-native';
 import Animated, {
@@ -14,20 +12,9 @@ import Animated, {
   withSpring,
   ReduceMotion,
 } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { colors, radius, typography, spacing, shadows } from '../lib/theme';
-
-interface BeamButtonProps {
-  title: string;
-  onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
-  loading?: boolean;
-  disabled?: boolean;
-  style?: StyleProp<ViewStyle>;
-  textStyle?: StyleProp<TextStyle>;
-  icon?: React.ReactNode;
-  accessibilityLabel?: string;
-}
+import type { BeamButtonProps } from './BeamButton.types';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -41,6 +28,7 @@ export function BeamButton({
   style,
   textStyle,
   icon,
+  role = 'default',
   accessibilityLabel,
 }: BeamButtonProps) {
   const scale = useSharedValue(1);
@@ -69,9 +57,17 @@ export function BeamButton({
 
   const isDisabled = disabled || loading;
 
+  const handlePress = useCallback(() => {
+    const feedback = variant === 'primary'
+      ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft)
+      : Haptics.selectionAsync();
+    feedback.catch(() => undefined);
+    onPress();
+  }, [onPress, variant]);
+
   return (
     <AnimatedPressable
-      onPress={onPress}
+      onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={isDisabled}
@@ -127,7 +123,7 @@ const styles = StyleSheet.create({
   // Variants
   primary: {
     backgroundColor: colors.primary,
-    ...shadows.md,
+    ...shadows.sm,
   },
   secondary: {
     backgroundColor: colors.glassBg,

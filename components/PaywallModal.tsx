@@ -10,10 +10,10 @@ import {
   View,
 } from 'react-native';
 import { GlassContainer, GlassView } from 'expo-glass-effect';
-import { Ionicons } from '@expo/vector-icons';
 import { BeamButton } from './BeamButton';
 import { canUseLiquidGlass, LiquidGlassButton } from './LiquidGlassButton';
-import { colors, radius, spacing, typography } from '../lib/theme';
+import { AppIcon } from './AppIcon';
+import { colors, spacing, typography } from '../lib/theme';
 import {
   getOfferings,
   getPriceString,
@@ -29,13 +29,13 @@ interface PaywallModalProps {
   onPurchaseComplete: (isPro: boolean) => void;
 }
 
-const features: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string }> = [
-  { icon: 'infinite-outline', label: 'Unlimited devices in your domain' },
-  { icon: 'globe-outline', label: 'Remote casting on any network' },
-  { icon: 'sparkles-outline', label: '4K quality streaming' },
-  { icon: 'people-outline', label: 'Invite guests to your domain' },
-  { icon: 'film-outline', label: 'Watch party with sync playback' },
-  { icon: 'lock-closed-outline', label: 'End-to-end encrypted' },
+const features = [
+  { ios: 'infinity' as const, android: 'all_inclusive' as const, label: 'Unlimited devices in your domain' },
+  { ios: 'globe' as const, android: 'public' as const, label: 'Remote casting on any network' },
+  { ios: 'sparkles' as const, android: 'auto_awesome' as const, label: '4K quality streaming' },
+  { ios: 'person.2' as const, android: 'group' as const, label: 'Invite guests to your domain' },
+  { ios: 'film' as const, android: 'movie' as const, label: 'Watch party with sync playback' },
+  { ios: 'lock.shield' as const, android: 'enhanced_encryption' as const, label: 'End-to-end encrypted' },
 ];
 
 export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallModalProps) {
@@ -171,7 +171,6 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
 
   const content = (
     <>
-      <View style={styles.handle} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -197,7 +196,13 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
             <View style={styles.featureList}>
               {features.map((feature) => (
                 <View key={feature.label} style={styles.featureRow}>
-                  <Ionicons name={feature.icon} size={20} color={colors.primary} style={styles.featureIcon} />
+                  <AppIcon
+                    ios={feature.ios}
+                    android={feature.android}
+                    size={20}
+                    color={colors.primary}
+                    style={styles.featureIcon}
+                  />
                   <Text style={[typography.body, styles.featureLabel]}>{feature.label}</Text>
                 </View>
               ))}
@@ -218,56 +223,41 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
   );
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" transparent>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {liquidGlassEnabled ? (
-            <GlassView
-              style={styles.sheet}
-              glassEffectStyle="regular"
-              colorScheme="light"
-            >
-              {content}
-            </GlassView>
-          ) : (
-            <View style={[styles.sheet, styles.fallbackSheet]}>{content}</View>
-          )}
-        </View>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      allowSwipeDismissal
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalRoot}>
+        {liquidGlassEnabled ? (
+          <GlassView style={styles.sheet} glassEffectStyle="regular" colorScheme="light">
+            {content}
+          </GlassView>
+        ) : (
+          <View style={[styles.sheet, styles.fallbackSheet]}>{content}</View>
+        )}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.24)',
-    justifyContent: 'flex-end',
-  },
-  container: {
-    maxHeight: '88%',
+    backgroundColor: colors.bg,
   },
   sheet: {
-    maxHeight: '100%',
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    overflow: 'hidden',
-    paddingBottom: Platform.OS === 'ios' ? 34 : spacing.xl,
+    flex: 1,
   },
   fallbackSheet: {
     backgroundColor: colors.bg,
   },
-  handle: {
-    width: 36,
-    height: 5,
-    borderRadius: radius.full,
-    backgroundColor: colors.separatorOpaque,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-  },
   scrollContent: {
     padding: spacing.xxl,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xxxl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xxxl,
   },
   title: {
     color: colors.text,

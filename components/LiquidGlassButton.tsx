@@ -13,6 +13,7 @@ import {
   isGlassEffectAPIAvailable,
   isLiquidGlassAvailable,
 } from 'expo-glass-effect';
+import * as Haptics from 'expo-haptics';
 import { colors, radius, spacing, typography } from '../lib/theme';
 
 interface LiquidGlassButtonProps {
@@ -41,6 +42,13 @@ export function LiquidGlassButton({
   style,
 }: LiquidGlassButtonProps) {
   const isDisabled = disabled || loading;
+  const handlePress = () => {
+    const feedback = prominent
+      ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft)
+      : Haptics.selectionAsync();
+    feedback.catch(() => undefined);
+    onPress();
+  };
   const content = loading ? (
     <ActivityIndicator color={prominent ? colors.textInverse : colors.primary} size="small" />
   ) : (
@@ -68,7 +76,7 @@ export function LiquidGlassButton({
         colorScheme="light"
       >
         <Pressable
-          onPress={onPress}
+          onPress={handlePress}
           disabled={isDisabled}
           accessibilityRole="button"
           accessibilityLabel={title}
@@ -83,7 +91,7 @@ export function LiquidGlassButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={title}

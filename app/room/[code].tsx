@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
-import { colors, typography, spacing, radius } from '../../lib/theme';
+import { AppIcon } from '../../components/AppIcon';
+import { AppTextField } from '../../components/AppTextField';
+import { colors, typography, spacing } from '../../lib/theme';
 
 export default function RoomScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -42,22 +44,21 @@ export default function RoomScreen() {
             {roomCode}
           </Text>
 
-          <TextInput
-            style={styles.input}
+          <AppTextField
             placeholder="Your display name"
-            placeholderTextColor={colors.textTertiary}
             value={displayName}
             onChangeText={setDisplayName}
             autoFocus
             returnKeyType="join"
-            onSubmitEditing={handleJoin}
-            accessibilityLabel="Display name"
+            onSubmit={handleJoin}
           />
 
           <BeamButton
             title="Join"
             onPress={handleJoin}
             loading={joining}
+            icon={<AppIcon ios="arrow.right.circle.fill" android="arrow_circle_right" size={18} color={colors.textInverse} />}
+            iosSystemImage="arrow.right.circle.fill"
             style={styles.joinButton}
           />
 
@@ -76,7 +77,7 @@ export default function RoomScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: colors.bg,
     justifyContent: 'center',
   },
   content: {
@@ -91,16 +92,8 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     width: '100%',
   },
-  input: {
-    height: 48,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    fontSize: 17,
-    color: colors.text,
-    marginBottom: spacing.lg,
-  },
   joinButton: {
     width: '100%',
+    marginTop: spacing.lg,
   },
 });

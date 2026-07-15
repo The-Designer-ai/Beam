@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Glass } from './Glass';
+import { AppIcon } from './AppIcon';
 import { colors, typography, radius, spacing } from '../lib/theme';
 import { Device } from '../types';
 
@@ -22,8 +23,16 @@ export function DeviceCard({ device, onPress }: DeviceCardProps) {
       <Glass style={[styles.card, !device.online && styles.offlineCard]}>
         <View style={styles.header}>
           <View style={styles.nameRow}>
-            <View style={[styles.dot, { backgroundColor: device.online ? colors.online : colors.offline }]} />
-            <Text style={typography.headline} numberOfLines={1}>{device.name}</Text>
+            <View style={styles.deviceIcon}>
+              <AppIcon
+                ios={device.type === 'web' ? 'laptopcomputer' : 'iphone'}
+                android={device.type === 'web' ? 'laptop' : 'smartphone'}
+                size={20}
+                color={colors.primary}
+              />
+              <View style={[styles.dot, { backgroundColor: device.online ? colors.online : colors.offline }]} />
+            </View>
+            <Text style={[typography.headline, styles.deviceName]} numberOfLines={1}>{device.name}</Text>
           </View>
           <Text style={[styles.badge, { color: device.online ? colors.online : colors.offline }]}>
             {device.online ? 'Online' : 'Offline'}
@@ -64,7 +73,20 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
   },
+  deviceIcon: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deviceName: {
+    flex: 1,
+    color: colors.text,
+  },
   dot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
     width: 8,
     height: 8,
     borderRadius: radius.full,

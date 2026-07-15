@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { PaywallModal } from '../../components/PaywallModal';
+import { AppIcon } from '../../components/AppIcon';
 import { colors, typography, spacing, radius } from '../../lib/theme';
 import { getStoredUser, clearUser, getSubscription, storeSubscription } from '../../lib/store';
 import { User, SubscriptionTier } from '../../types';
@@ -136,12 +137,19 @@ export default function SettingsScreen() {
       >
         {/* Profile */}
         <Glass style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile</Text>
-          <Text style={[typography.headline]}>{user?.displayName || 'User'}</Text>
-          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{user?.email}</Text>
-          <Text style={[typography.footnote, { color: colors.primary, marginTop: spacing.xs }]}>
-            Domain: {user?.domain || '@user'}
-          </Text>
+          <View style={styles.profileRow}>
+            <View style={styles.profileIcon}>
+              <AppIcon ios="person.crop.circle.fill" android="account_circle" size={38} color={colors.primary} />
+            </View>
+            <View style={styles.profileDetails}>
+              <Text style={styles.sectionTitle}>Profile</Text>
+              <Text style={[typography.headline]}>{user?.displayName || 'User'}</Text>
+              <Text style={[typography.footnote, { color: colors.textSecondary }]}>{user?.email}</Text>
+              <Text style={[typography.footnote, { color: colors.primary, marginTop: spacing.xs }]}>
+                Domain: {user?.domain || '@user'}
+              </Text>
+            </View>
+          </View>
         </Glass>
 
         {/* Subscription */}
@@ -163,6 +171,8 @@ export default function SettingsScreen() {
                 title="Upgrade"
                 onPress={() => setShowPaywall(true)}
                 size="sm"
+                icon={<AppIcon ios="sparkles" android="auto_awesome" size={16} color={colors.textInverse} />}
+                iosSystemImage="sparkles"
               />
             )}
           </View>
@@ -172,6 +182,8 @@ export default function SettingsScreen() {
               onPress={() => setShowPaywall(true)}
               variant="secondary"
               size="sm"
+              icon={<AppIcon ios="creditcard" android="credit_card" size={17} color={colors.primary} />}
+              iosSystemImage="creditcard"
               style={{ marginTop: spacing.md }}
             />
           )}
@@ -223,6 +235,10 @@ export default function SettingsScreen() {
           title="Sign Out"
           onPress={handleLogout}
           variant="secondary"
+          icon={<AppIcon ios="rectangle.portrait.and.arrow.right" android="logout" size={18} color={colors.error} />}
+          iosSystemImage="rectangle.portrait.and.arrow.right"
+          role="destructive"
+          textStyle={{ color: colors.error }}
           style={{ marginTop: spacing.lg }}
         />
 
@@ -257,6 +273,22 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.md,
     padding: spacing.lg,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  profileIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileDetails: {
+    flex: 1,
   },
   sectionTitle: {
     ...typography.footnote,

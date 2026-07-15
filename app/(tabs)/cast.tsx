@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { DeviceCard } from '../../components/DeviceCard';
 import { BeamButton } from '../../components/BeamButton';
+import { AppIcon } from '../../components/AppIcon';
 import { colors, typography, spacing } from '../../lib/theme';
 import { Device, SignalingProvider, SignalMessage } from '../../types';
 import { WebRTCManager } from '../../lib/webrtc';
@@ -123,7 +124,7 @@ export default function CastScreen() {
         <Animated.View entering={FadeInDown.duration(180).reduceMotion(ReduceMotion.System)}>
           <Glass style={styles.castingBanner}>
             <View style={styles.castingRow}>
-              <View style={styles.castingDot} />
+              <AppIcon ios="dot.radiowaves.left.and.right" android="cast" size={20} color={colors.success} />
               <Text style={[typography.headline, { color: colors.primary }]}>{status}</Text>
             </View>
             <Text style={[typography.caption1, { color: colors.textSecondary }]}>
@@ -133,6 +134,9 @@ export default function CastScreen() {
               title="Stop Casting"
               onPress={stopCast}
               variant="secondary"
+              icon={<AppIcon ios="stop.fill" android="stop" size={17} color={colors.error} />}
+              iosSystemImage="stop.fill"
+              role="destructive"
               style={styles.stopButton}
             />
           </Glass>
@@ -156,10 +160,18 @@ export default function CastScreen() {
         ) : loadError ? (
           <View style={styles.messageState}>
             <Text style={[typography.body, styles.messageText]}>{loadError}</Text>
-            <BeamButton title="Try Again" onPress={loadDevices} variant="secondary" size="sm" />
+            <BeamButton
+              title="Try Again"
+              onPress={loadDevices}
+              variant="secondary"
+              size="sm"
+              icon={<AppIcon ios="arrow.clockwise" android="refresh" size={17} color={colors.primary} />}
+              iosSystemImage="arrow.clockwise"
+            />
           </View>
         ) : devices.filter((device) => device.online).length === 0 ? (
           <Glass contentStyle={styles.emptyContent}>
+            <AppIcon ios="iphone.slash" android="phonelink_off" size={34} color={colors.textTertiary} />
             <Text style={[typography.headline, styles.messageText]}>No online devices</Text>
             <Text style={[typography.subhead, styles.messageText]}>Open Beam on another device, then return here.</Text>
           </Glass>
@@ -197,12 +209,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.xs,
-  },
-  castingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.online,
   },
   stopButton: {
     marginTop: spacing.md,

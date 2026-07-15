@@ -1,9 +1,10 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import {
   Pressable,
   Text,
   StyleSheet,
   ActivityIndicator,
+  StyleProp,
   ViewStyle,
   TextStyle,
 } from 'react-native';
@@ -11,6 +12,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  ReduceMotion,
 } from 'react-native-reanimated';
 import { colors, radius, typography, spacing, shadows } from '../lib/theme';
 
@@ -21,9 +23,10 @@ interface BeamButtonProps {
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
+  accessibilityLabel?: string;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -38,6 +41,7 @@ export function BeamButton({
   style,
   textStyle,
   icon,
+  accessibilityLabel,
 }: BeamButtonProps) {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -48,11 +52,19 @@ export function BeamButton({
   }));
 
   const handlePressIn = useCallback(() => {
-    scale.value = withSpring(0.97, { damping: 20, stiffness: 300 });
+    scale.value = withSpring(0.97, {
+      damping: 20,
+      stiffness: 300,
+      reduceMotion: ReduceMotion.System,
+    });
   }, []);
 
   const handlePressOut = useCallback(() => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 200 });
+    scale.value = withSpring(1, {
+      damping: 15,
+      stiffness: 200,
+      reduceMotion: ReduceMotion.System,
+    });
   }, []);
 
   const isDisabled = disabled || loading;
@@ -63,6 +75,10 @@ export function BeamButton({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      hitSlop={4}
       style={[
         styles.base,
         styles[variant],
@@ -81,6 +97,9 @@ export function BeamButton({
         <>
           {icon}
           <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
             style={[
               styles.text,
               styles[`${variant}Text` as keyof typeof styles] as TextStyle,
@@ -102,7 +121,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,
-    gap: 8,
+    gap: spacing.sm,
   },
 
   // Variants
@@ -122,18 +141,18 @@ const styles = StyleSheet.create({
   // Sizes
   sm: {
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: 32,
-  },
-  md: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     minHeight: 44,
   },
+  md: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    minHeight: 48,
+  },
   lg: {
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.xxl,
-    minHeight: 52,
+    minHeight: 54,
   },
 
   // States
@@ -144,6 +163,7 @@ const styles = StyleSheet.create({
   // Text
   text: {
     ...typography.headline,
+    textAlign: 'center',
   },
   primaryText: {
     color: colors.textInverse,

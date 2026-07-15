@@ -70,6 +70,14 @@ export async function getStoredPushToken(): Promise<string | null> {
   return AsyncStorage.getItem(PUSH_TOKEN_KEY);
 }
 
+export async function arePushNotificationsEnabled(): Promise<boolean> {
+  const [{ status }, token] = await Promise.all([
+    Notifications.getPermissionsAsync(),
+    getStoredPushToken(),
+  ]);
+  return status === 'granted' && token !== null;
+}
+
 // ─── Handle notification taps (app opened from notification) ──────
 export function setupNotificationTapHandler() {
   // App was opened via notification (cold start)

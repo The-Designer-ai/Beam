@@ -8,6 +8,7 @@ interface GlassProps {
   intensity?: number;
   tint?: 'light' | 'dark' | 'extraLight';
   style?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
   noPadding?: boolean;
 }
 
@@ -15,7 +16,14 @@ interface GlassProps {
  * Liquid glass surface — frosted blur + white sheen gradient + bright edge highlight.
  * This is the core visual material of Beam, inspired by iOS Control Center / Dock.
  */
-export function Glass({ children, intensity = glass.blurIntensity, tint = glass.tint, style, noPadding }: GlassProps) {
+export function Glass({
+  children,
+  intensity = glass.blurIntensity,
+  tint = glass.tint,
+  style,
+  contentStyle,
+  noPadding,
+}: GlassProps) {
   return (
     <View style={[styles.container, shadows.sm, style]}>
       <BlurView
@@ -28,7 +36,7 @@ export function Glass({ children, intensity = glass.blurIntensity, tint = glass.
       {/* Bright top edge highlight — light catching the glass */}
       <View style={styles.edgeHighlight} />
       {/* Content */}
-      <View style={[styles.content, noPadding && { padding: 0 }]}>
+      <View style={[styles.content, noPadding && styles.noPadding, contentStyle]}>
         {children}
       </View>
     </View>
@@ -56,5 +64,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  noPadding: {
+    padding: 0,
   },
 });

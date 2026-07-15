@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, Platform, AppState } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { colors, typography, spacing, radius } from '../../lib/theme';
@@ -81,8 +82,8 @@ export default function WatchScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.header}>
         <Text style={[typography.largeTitle, { color: colors.text }]}>Watch</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
           Receive a cast or join a watch party
@@ -90,8 +91,8 @@ export default function WatchScreen() {
       </Animated.View>
 
       {!isWatching ? (
-        <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.content}>
-          <Glass style={styles.joinCard}>
+        <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
+          <Glass style={styles.joinCard} contentStyle={styles.joinCardContent}>
             <Text style={[typography.title3, { marginBottom: spacing.md }]}>Join a Room</Text>
             <Text style={[typography.subhead, { color: colors.textSecondary, marginBottom: spacing.lg }]}>
               Enter the 6-character code shared by the sender.
@@ -102,10 +103,12 @@ export default function WatchScreen() {
               placeholder="Enter room code"
               placeholderTextColor={colors.textTertiary}
               value={roomCode}
-              onChangeText={setRoomCode}
+              onChangeText={(value) => setRoomCode(value.toUpperCase())}
               autoCapitalize="characters"
               maxLength={6}
-              autoFocus
+              returnKeyType="join"
+              onSubmitEditing={joinRoom}
+              accessibilityLabel="Room code"
             />
 
             <BeamButton
@@ -120,8 +123,8 @@ export default function WatchScreen() {
           </Text>
         </Animated.View>
       ) : (
-        <Animated.View entering={FadeInDown.springify()} style={styles.content}>
-          <Glass style={styles.receivingCard}>
+        <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
+          <Glass style={styles.receivingCard} contentStyle={styles.receivingCardContent}>
             {/* ─── Video Stream via RTCPIPView ─────────────────────────── */}
             {streamURL ? (
               <View style={styles.videoContainer}>
@@ -172,7 +175,7 @@ export default function WatchScreen() {
           </Glass>
         </Animated.View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -182,7 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: spacing.md,
     paddingHorizontal: spacing.xxl,
     paddingBottom: spacing.lg,
   },
@@ -192,14 +195,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   joinCard: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  joinCardContent: {
     padding: spacing.xxl,
     alignItems: 'center',
+    width: '100%',
   },
   codeInput: {
     width: '100%',
     height: 56,
     fontSize: 28,
-    letterSpacing: 8,
+    letterSpacing: 0,
     textAlign: 'center',
     backgroundColor: colors.bgSecondary,
     borderRadius: radius.md,
@@ -211,8 +220,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   receivingCard: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+  },
+  receivingCardContent: {
     padding: spacing.xxl,
     alignItems: 'center',
+    width: '100%',
   },
   receivingIcon: {
     width: 100,

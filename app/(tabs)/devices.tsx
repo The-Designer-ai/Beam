@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { DeviceCard } from '../../components/DeviceCard';
 import { BeamButton } from '../../components/BeamButton';
@@ -204,8 +205,8 @@ export default function DevicesScreen() {
   // ─── Render ──────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
-      <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.header}>
         <Text style={[typography.largeTitle, { color: colors.text }]}>Devices</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
           {onlineCount} online · {devices.length} total
@@ -216,7 +217,7 @@ export default function DevicesScreen() {
         data={devices}
         keyExtractor={(d) => d.id}
         renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
+          <Animated.View entering={FadeInDown.delay(index * 40).duration(180).reduceMotion(ReduceMotion.System)}>
             <DeviceCard device={item} onPress={() => handleCast(item)} />
           </Animated.View>
         )}
@@ -327,7 +328,7 @@ export default function DevicesScreen() {
           style={styles.fabButton}
         />
       </Glass>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -337,7 +338,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: spacing.md,
     paddingHorizontal: spacing.xxl,
     paddingBottom: spacing.lg,
   },

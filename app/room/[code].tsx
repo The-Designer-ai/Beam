@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { colors, typography, spacing, radius } from '../../lib/theme';
@@ -33,8 +33,8 @@ export default function RoomScreen() {
 
   return (
     <View style={styles.container}>
-      <Animated.View entering={FadeInDown.springify()} style={styles.content}>
-        <Glass style={styles.card}>
+      <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
+        <Glass style={styles.card} contentStyle={styles.cardContent}>
           <Text style={[typography.title1, { color: colors.text, textAlign: 'center', marginBottom: spacing.sm }]}>
             Join Room
           </Text>
@@ -49,6 +49,9 @@ export default function RoomScreen() {
             value={displayName}
             onChangeText={setDisplayName}
             autoFocus
+            returnKeyType="join"
+            onSubmitEditing={handleJoin}
+            accessibilityLabel="Display name"
           />
 
           <BeamButton
@@ -80,7 +83,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   card: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  cardContent: {
     padding: spacing.xxl,
+    width: '100%',
   },
   input: {
     height: 48,

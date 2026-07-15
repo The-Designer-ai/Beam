@@ -1,84 +1,56 @@
-import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { colors, typography, tabBar } from '../../lib/theme';
+import { DynamicColorIOS, Platform } from 'react-native';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { colors } from '../../lib/theme';
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    devices: '📱',
-    cast: '📡',
-    watch: '📺',
-    settings: '⚙️',
-  };
+const defaultTabColor = Platform.OS === 'ios'
+  ? DynamicColorIOS({ light: colors.textTertiary, dark: '#A1A1A6' })
+  : colors.textTertiary;
 
-  return (
-    <View style={styles.tabIcon}>
-      <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{icons[name] || '●'}</Text>
-    </View>
-  );
-}
+const selectedTabColor = Platform.OS === 'ios'
+  ? DynamicColorIOS({ light: colors.primary, dark: '#5AC8FA' })
+  : colors.primary;
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarBackground: () => (
-          <BlurView
-            intensity={tabBar.glassBlur}
-            tint="light"
-            style={StyleSheet.absoluteFill}
-          />
-        ),
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textTertiary,
-        tabBarLabelStyle: { ...typography.caption2, marginTop: -2 },
+    <NativeTabs
+      tintColor={selectedTabColor}
+      iconColor={{ default: defaultTabColor, selected: selectedTabColor }}
+      labelStyle={{
+        default: { color: defaultTabColor, fontSize: 11 },
+        selected: { color: selectedTabColor, fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen
-        name="devices"
-        options={{
-          title: 'Devices',
-          tabBarIcon: ({ focused }) => <TabIcon name="devices" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="cast"
-        options={{
-          title: 'Cast',
-          tabBarIcon: ({ focused }) => <TabIcon name="cast" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="watch"
-        options={{
-          title: 'Watch',
-          tabBarIcon: ({ focused }) => <TabIcon name="watch" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ focused }) => <TabIcon name="settings" focused={focused} />,
-        }}
-      />
-    </Tabs>
+      <NativeTabs.Trigger name="devices">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'iphone', selected: 'iphone' }}
+          md={{ default: 'phone_iphone', selected: 'phone_iphone' }}
+        />
+        <NativeTabs.Trigger.Label>Devices</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="cast">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'airplayvideo', selected: 'airplayvideo' }}
+          md={{ default: 'cast', selected: 'cast' }}
+        />
+        <NativeTabs.Trigger.Label>Cast</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="watch">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'tv', selected: 'tv.fill' }}
+          md={{ default: 'tv', selected: 'tv' }}
+        />
+        <NativeTabs.Trigger.Label>Watch</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
+          md={{ default: 'settings', selected: 'settings' }}
+        />
+        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    position: 'absolute',
-    backgroundColor: `rgba(255, 255, 255, ${tabBar.backgroundOpacity})`,
-    borderTopWidth: 0,
-    height: tabBar.height,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-    paddingTop: 6,
-  },
-  tabIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

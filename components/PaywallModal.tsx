@@ -1,24 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  Modal,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  Platform,
   ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import Animated, { FadeInUp, FadeOutDown } from 'react-native-reanimated';
-import { Glass } from './Glass';
+import { GlassContainer, GlassView } from 'expo-glass-effect';
+import { Ionicons } from '@expo/vector-icons';
 import { BeamButton } from './BeamButton';
-import { colors, typography, radius, spacing } from '../lib/theme';
+import { canUseLiquidGlass, LiquidGlassButton } from './LiquidGlassButton';
+import { colors, radius, spacing, typography } from '../lib/theme';
 import {
   getOfferings,
-  purchasePackage,
   getPriceString,
-  presentPaywall,
   presentCustomerCenter,
+  purchasePackage,
+  restorePurchases,
   PurchasesPackage,
 } from '../lib/revenuecat';
 
@@ -28,20 +29,16 @@ interface PaywallModalProps {
   onPurchaseComplete: (isPro: boolean) => void;
 }
 
-const features = [
-  { icon: '∞', label: 'Unlimited devices in your domain' },
-  { icon: '🌍', label: 'Remote casting (any network)' },
-  { icon: '4K', label: '4K quality streaming' },
-  { icon: '👥', label: 'Invite guests to your domain' },
-  { icon: '🎬', label: 'Watch party with sync playback' },
-  { icon: '🔒', label: 'End-to-end encrypted' },
+const features: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string }> = [
+  { icon: 'infinite-outline', label: 'Unlimited devices in your domain' },
+  { icon: 'globe-outline', label: 'Remote casting on any network' },
+  { icon: 'sparkles-outline', label: '4K quality streaming' },
+  { icon: 'people-outline', label: 'Invite guests to your domain' },
+  { icon: 'film-outline', label: 'Watch party with sync playback' },
+  { icon: 'lock-closed-outline', label: 'End-to-end encrypted' },
 ];
 
-export function PaywallModal({
-  visible,
-  onClose,
-  onPurchaseComplete,
-}: PaywallModalProps) {
+export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallModalProps) {
   const [loading, setLoading] = useState('');
   const [offerings, setOfferings] = useState<{
     monthly: PurchasesPackage | null;
@@ -49,27 +46,32 @@ export function PaywallModal({
     lifetime: PurchasesPackage | null;
   }>({ monthly: null, yearly: null, lifetime: null });
   const [fetchingOfferings, setFetchingOfferings] = useState(true);
+  const [offeringsError, setOfferingsError] = useState('');
+  const liquidGlassEnabled = canUseLiquidGlass();
 
   useEffect(() => {
-    if (visible) {
-      loadOfferings();
-    }
+    if (visible) loadOfferings();
   }, [visible]);
 
   async function loadOfferings() {
     setFetchingOfferings(true);
+    setOfferingsError('');
     try {
       const result = await getOfferings();
       setOfferings(result);
-    } catch (err) {
-      console.warn('Failed to load offerings:', err);
+    } catch {
+      setOfferingsError('Plans could not be loaded. Check your connection and try again.');
     } finally {
       setFetchingOfferings(false);
     }
   }
 
   async function handleSubscribe(pkg: PurchasesPackage | null, label: string) {
-    if (!pkg) return;
+    if (!pkg) {
+      Alert.alert('Plan Unavailable', 'This plan is not available right now. Please try again later.');
+      return;
+    }
+
     setLoading(label);
     try {
       const { isPro } = await purchasePackage(pkg);
@@ -77,11 +79,9 @@ export function PaywallModal({
         onPurchaseComplete(true);
         onClose();
       }
-    } catch (err: any) {
-      if (err?.userCancelled) {
-        // User cancelled — do nothing
-      } else {
-        console.error('Purchase failed:', err);
+    } catch (error: any) {
+      if (!error?.userCancelled) {
+        Alert.alert('Purchase Failed', error?.message || 'The purchase could not be completed.');
       }
     } finally {
       setLoading('');
@@ -91,125 +91,148 @@ export function PaywallModal({
   async function handleRestore() {
     setLoading('restore');
     try {
-      const { isPro } = await purchasePackage(null as any); // placeholder
-      // Actually use restore:
-      const Purchases = require('react-native-purchases').default;
-      const { customerInfo } = await Purchases.restorePurchases();
-      const isProCheck = customerInfo.entitlements.active['Beam Pro'] !== undefined;
-      if (isProCheck) {
+      const { isPro } = await restorePurchases();
+      if (isPro) {
         onPurchaseComplete(true);
         onClose();
+      } else {
+        Alert.alert('No Purchase Found', 'No active Beam Pro purchase was found.');
       }
-    } catch {
-      // No purchases to restore
+    } catch (error: any) {
+      Alert.alert('Restore Failed', error?.message || 'Purchases could not be restored.');
     } finally {
       setLoading('');
     }
   }
 
-  async function handleRevenueCatPaywall() {
+  async function handleManageSubscription() {
     try {
-      const shown = await presentPaywall();
-      if (shown) {
-        // Paywall was shown — user may have purchased
-        const { isPro } = await (await import('../lib/revenuecat')).checkProStatus();
-        if (isPro) {
-          onPurchaseComplete(true);
-          onClose();
-        }
-      }
-    } catch {
-      // Fallback to our custom paywall
+      await presentCustomerCenter();
+    } catch (error: any) {
+      Alert.alert('Unable to Open', error?.message || 'Subscription management is unavailable right now.');
     }
   }
 
-  const monthlyPkg = offerings.monthly;
   const yearlyPkg = offerings.yearly;
+  const monthlyPkg = offerings.monthly;
   const lifetimePkg = offerings.lifetime;
-  const yearlyPrice = yearlyPkg ? getPriceString(yearlyPkg) : '$19.99';
-  const monthlyPrice = monthlyPkg ? getPriceString(monthlyPkg) : '$2.99';
+  const yearlyPrice = yearlyPkg ? getPriceString(yearlyPkg) : 'Unavailable';
+  const monthlyPrice = monthlyPkg ? getPriceString(monthlyPkg) : 'Unavailable';
+
+  const pricingButtons = (
+    <>
+      <LiquidGlassButton
+        title={`${yearlyPrice} / year (save 44%)`}
+        onPress={() => handleSubscribe(yearlyPkg, 'yearly')}
+        loading={loading === 'yearly'}
+        disabled={!yearlyPkg}
+        prominent
+        style={styles.fullWidth}
+      />
+      <LiquidGlassButton
+        title={`${monthlyPrice} / month`}
+        onPress={() => handleSubscribe(monthlyPkg, 'monthly')}
+        loading={loading === 'monthly'}
+        disabled={!monthlyPkg}
+        style={styles.fullWidth}
+      />
+      {lifetimePkg && (
+        <LiquidGlassButton
+          title={`${getPriceString(lifetimePkg)} Lifetime`}
+          onPress={() => handleSubscribe(lifetimePkg, 'lifetime')}
+          loading={loading === 'lifetime'}
+          style={styles.fullWidth}
+        />
+      )}
+    </>
+  );
+
+  const actionButtons = (
+    <>
+      {!fetchingOfferings && !offeringsError && pricingButtons}
+      <View style={styles.utilityRow}>
+        <LiquidGlassButton
+          title="Restore"
+          onPress={handleRestore}
+          loading={loading === 'restore'}
+          compact
+          style={styles.utilityButton}
+        />
+        <LiquidGlassButton
+          title="Manage"
+          onPress={handleManageSubscription}
+          compact
+          style={styles.utilityButton}
+        />
+      </View>
+      <LiquidGlassButton title="Maybe later" onPress={onClose} compact style={styles.dismissButton} />
+    </>
+  );
+
+  const content = (
+    <>
+      <View style={styles.handle} />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <Text style={[typography.largeTitle, styles.title]}>Beam Pro</Text>
+        <Text style={[typography.body, styles.subtitle]}>
+          Cast your screen anywhere, to anyone, in 4K.
+        </Text>
+
+        {fetchingOfferings ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[typography.subhead, styles.loadingText]}>Loading plans...</Text>
+          </View>
+        ) : offeringsError ? (
+          <View style={styles.errorContainer}>
+            <Text style={[typography.body, styles.errorText]}>{offeringsError}</Text>
+            <BeamButton title="Try Again" onPress={loadOfferings} variant="secondary" />
+          </View>
+        ) : (
+          <>
+            <View style={styles.featureList}>
+              {features.map((feature) => (
+                <View key={feature.label} style={styles.featureRow}>
+                  <Ionicons name={feature.icon} size={20} color={colors.primary} style={styles.featureIcon} />
+                  <Text style={[typography.body, styles.featureLabel]}>{feature.label}</Text>
+                </View>
+              ))}
+            </View>
+
+          </>
+        )}
+
+        {liquidGlassEnabled ? (
+          <GlassContainer spacing={spacing.md} style={styles.actions}>
+            {actionButtons}
+          </GlassContainer>
+        ) : (
+          <View style={styles.actions}>{actionButtons}</View>
+        )}
+      </ScrollView>
+    </>
+  );
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" transparent>
+    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" transparent>
       <View style={styles.overlay}>
-        <Animated.View entering={FadeInUp.springify()} exiting={FadeOutDown} style={styles.container}>
-          <Glass style={styles.sheet}>
-            <View style={styles.handle} />
-
-            <Text style={[typography.largeTitle, styles.title]}>Beam Pro</Text>
-            <Text style={[typography.body, styles.subtitle]}>
-              Cast your screen anywhere, to anyone, in 4K.
-            </Text>
-
-            {fetchingOfferings ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[typography.subhead, { color: colors.textTertiary, marginTop: spacing.md }]}>
-                  Loading plans...
-                </Text>
-              </View>
-            ) : (
-              <>
-                <ScrollView style={styles.featureList} showsVerticalScrollIndicator={false}>
-                  {features.map((f, i) => (
-                    <View key={i} style={styles.featureRow}>
-                      <Text style={styles.featureIcon}>{f.icon}</Text>
-                      <Text style={[typography.body, { color: colors.text }]}>{f.label}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-
-                <View style={styles.pricing}>
-                  {/* Yearly — Best value */}
-                  <BeamButton
-                    title={`${yearlyPrice} / year  (save 44%)`}
-                    onPress={() => handleSubscribe(yearlyPkg, 'yearly')}
-                    loading={loading === 'yearly'}
-                    style={styles.button}
-                  />
-
-                  {/* Monthly */}
-                  <BeamButton
-                    title={`${monthlyPrice} / month`}
-                    onPress={() => handleSubscribe(monthlyPkg, 'monthly')}
-                    loading={loading === 'monthly'}
-                    variant="secondary"
-                    style={styles.button}
-                  />
-
-                  {/* Lifetime (if available) */}
-                  {lifetimePkg && (
-                    <BeamButton
-                      title={`${getPriceString(lifetimePkg)} — Lifetime`}
-                      onPress={() => handleSubscribe(lifetimePkg, 'lifetime')}
-                      loading={loading === 'lifetime'}
-                      variant="secondary"
-                      style={styles.button}
-                    />
-                  )}
-                </View>
-              </>
-            )}
-
-            <Pressable onPress={handleRestore} style={styles.restore}>
-              <Text style={[typography.footnote, { color: colors.textTertiary }]}>
-                Restore Purchases
-              </Text>
-            </Pressable>
-
-            <Pressable onPress={presentCustomerCenter} style={styles.manageSub}>
-              <Text style={[typography.footnote, { color: colors.primary }]}>
-                Manage Subscription
-              </Text>
-            </Pressable>
-
-            <Pressable onPress={onClose} style={styles.dismiss}>
-              <Text style={[typography.body, { color: colors.textTertiary }]}>
-                Maybe later
-              </Text>
-            </Pressable>
-          </Glass>
-        </Animated.View>
+        <View style={styles.container}>
+          {liquidGlassEnabled ? (
+            <GlassView
+              style={styles.sheet}
+              glassEffectStyle="regular"
+              colorScheme="light"
+            >
+              {content}
+            </GlassView>
+          ) : (
+            <View style={[styles.sheet, styles.fallbackSheet]}>{content}</View>
+          )}
+        </View>
       </View>
     </Modal>
   );
@@ -218,70 +241,93 @@ export function PaywallModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
     justifyContent: 'flex-end',
   },
   container: {
-    maxHeight: '85%',
+    maxHeight: '88%',
   },
   sheet: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    maxHeight: '100%',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    overflow: 'hidden',
     paddingBottom: Platform.OS === 'ios' ? 34 : spacing.xl,
+  },
+  fallbackSheet: {
+    backgroundColor: colors.bg,
   },
   handle: {
     width: 36,
     height: 5,
-    borderRadius: 3,
+    borderRadius: radius.full,
     backgroundColor: colors.separatorOpaque,
     alignSelf: 'center',
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  scrollContent: {
+    padding: spacing.xxl,
+    paddingTop: spacing.lg,
   },
   title: {
+    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   subtitle: {
-    textAlign: 'center',
     color: colors.textSecondary,
-    marginBottom: spacing.xxl,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
   },
   loadingContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xxxl,
   },
+  loadingText: {
+    color: colors.textTertiary,
+    marginTop: spacing.md,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingVertical: spacing.xxxl,
+  },
+  errorText: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   featureList: {
-    maxHeight: 260,
-    marginBottom: spacing.xxl,
+    gap: spacing.xs,
+    marginBottom: spacing.xl,
   },
   featureRow: {
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
   },
   featureIcon: {
-    width: 32,
-    fontSize: 16,
+    width: 24,
     textAlign: 'center',
   },
-  pricing: {
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+  featureLabel: {
+    color: colors.text,
+    flex: 1,
   },
-  button: {
+  actions: {
+    gap: spacing.md,
+  },
+  fullWidth: {
     width: '100%',
   },
-  restore: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
+  utilityRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
   },
-  manageSub: {
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
+  utilityButton: {
+    flex: 1,
   },
-  dismiss: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
+  dismissButton: {
+    width: '100%',
   },
 });

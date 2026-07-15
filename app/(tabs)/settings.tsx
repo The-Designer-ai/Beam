@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Switch, Alert } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { PaywallModal } from '../../components/PaywallModal';
@@ -17,7 +18,7 @@ import {
 import {
   registerForPushNotifications,
   unregisterPushNotifications,
-  getStoredPushToken,
+  arePushNotificationsEnabled,
 } from '../../lib/notifications';
 
 export default function SettingsScreen() {
@@ -25,17 +26,23 @@ export default function SettingsScreen() {
   const [subscription, setSubscription] = useState<SubscriptionTier | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallLoading, setPaywallLoading] = useState(false);
-  const [notifications, setNotifications] = useState(true);
+  const [notifications, setNotifications] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    const u = await getStoredUser();
-    const sub = await getSubscription();
+    const [u, sub, notificationsEnabled] = await Promise.all([
+      getStoredUser(),
+      getSubscription(),
+      arePushNotificationsEnabled().catch(() => false),
+    ]);
     setUser(u);
     setSubscription(sub);
+    setNotifications(notificationsEnabled);
+    setNotificationsLoading(false);
 
     // Check RevenueCat for latest subscription status
     try {
@@ -49,18 +56,27 @@ export default function SettingsScreen() {
   }
 
   async function handleToggleNotifications(value: boolean) {
+    const previousValue = notifications;
     setNotifications(value);
-    if (value) {
-      const token = await registerForPushNotifications();
-      if (!token) {
-        setNotifications(false);
-        Alert.alert(
-          'Notifications Disabled',
-          'Please enable notifications in your iPhone Settings > Beam.'
-        );
+    setNotificationsLoading(true);
+    try {
+      if (value) {
+        const token = await registerForPushNotifications();
+        if (!token) {
+          setNotifications(false);
+          Alert.alert(
+            'Notifications Disabled',
+            'Please enable notifications in your iPhone Settings > Beam.'
+          );
+        }
+      } else {
+        await unregisterPushNotifications();
       }
-    } else {
-      await unregisterPushNotifications();
+    } catch {
+      setNotifications(previousValue);
+      Alert.alert('Notification Error', 'Beam could not update your notification setting. Please try again.');
+    } finally {
+      setNotificationsLoading(false);
     }
   }
 
@@ -109,14 +125,14 @@ export default function SettingsScreen() {
   const isPro = subscription?.type === 'pro';
 
   return (
-    <View style={styles.container}>
-      <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.header}>
         <Text style={[typography.largeTitle, { color: colors.text }]}>Settings</Text>
       </Animated.View>
 
       <Animated.ScrollView
         contentContainerStyle={styles.list}
-        entering={FadeInDown.delay(100).springify()}
+        entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)}
       >
         {/* Profile */}
         <Glass style={styles.section}>
@@ -194,6 +210,8 @@ export default function SettingsScreen() {
             <Switch
               value={notifications}
               onValueChange={handleToggleNotifications}
+              disabled={notificationsLoading}
+              accessibilityLabel="Push notifications"
               trackColor={{ false: colors.separatorOpaque, true: colors.primary }}
               thumbColor="#FFF"
             />
@@ -218,7 +236,7 @@ export default function SettingsScreen() {
         onClose={() => setShowPaywall(false)}
         onPurchaseComplete={handlePurchaseComplete}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -228,7 +246,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: spacing.md,
     paddingHorizontal: spacing.xxl,
     paddingBottom: spacing.lg,
   },

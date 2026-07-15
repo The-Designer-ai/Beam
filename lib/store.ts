@@ -10,10 +10,21 @@ const KEYS = {
   AUTH_TOKEN: '@beam/auth_token',
 } as const;
 
+async function parseStoredValue<T>(key: string, fallback: T): Promise<T> {
+  const data = await AsyncStorage.getItem(key);
+  if (!data) return fallback;
+
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    await AsyncStorage.removeItem(key);
+    return fallback;
+  }
+}
+
 // ─── User ──────────────────────────────────────────────────────────
 export async function getStoredUser(): Promise<User | null> {
-  const data = await AsyncStorage.getItem(KEYS.USER);
-  return data ? JSON.parse(data) : null;
+  return parseStoredValue<User | null>(KEYS.USER, null);
 }
 
 export async function storeUser(user: User): Promise<void> {
@@ -35,8 +46,7 @@ export async function storeAuthToken(token: string): Promise<void> {
 
 // ─── Devices ───────────────────────────────────────────────────────
 export async function getStoredDevices(): Promise<Device[]> {
-  const data = await AsyncStorage.getItem(KEYS.DEVICES);
-  return data ? JSON.parse(data) : [];
+  return parseStoredValue<Device[]>(KEYS.DEVICES, []);
 }
 
 export async function storeDevices(devices: Device[]): Promise<void> {
@@ -45,8 +55,7 @@ export async function storeDevices(devices: Device[]): Promise<void> {
 
 // ─── Rooms ─────────────────────────────────────────────────────────
 export async function getStoredRooms(): Promise<Room[]> {
-  const data = await AsyncStorage.getItem(KEYS.ROOMS);
-  return data ? JSON.parse(data) : [];
+  return parseStoredValue<Room[]>(KEYS.ROOMS, []);
 }
 
 export async function storeRooms(rooms: Room[]): Promise<void> {
@@ -55,8 +64,7 @@ export async function storeRooms(rooms: Room[]): Promise<void> {
 
 // ─── Subscription ──────────────────────────────────────────────────
 export async function getSubscription(): Promise<SubscriptionTier | null> {
-  const data = await AsyncStorage.getItem(KEYS.SUBSCRIPTION);
-  return data ? JSON.parse(data) : null;
+  return parseStoredValue<SubscriptionTier | null>(KEYS.SUBSCRIPTION, null);
 }
 
 export async function storeSubscription(sub: SubscriptionTier): Promise<void> {

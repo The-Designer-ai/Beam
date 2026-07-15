@@ -3,7 +3,7 @@
 // Wraps the native Swift BeamNearbyModule for Expo
 // ───────────────────────────────────────────────────────────
 
-import { requireNativeModule } from 'expo';
+import { requireOptionalNativeModule } from 'expo';
 
 type EventSubscription = {
   remove(): void;
@@ -29,7 +29,19 @@ interface BeamNearbyNativeModule {
   ): EventSubscription;
 }
 
-const Native = requireNativeModule<BeamNearbyNativeModule>('BeamNearby');
+// TODO: Treat this as a temporary safety fallback. BeamNearby should be
+// autolinked into every iOS build; if this is null, investigate native
+// autolinking/registration instead of accepting Nearby as permanently off.
+// This check prevents crash loops by disabling Nearby until a fixed native
+// rebuild includes/registers BeamNearbyModule.
+const Native = requireOptionalNativeModule<BeamNearbyNativeModule>('BeamNearby');
+
+function requireBeamNearby(): BeamNearbyNativeModule {
+  if (!Native) {
+    throw new Error('Nearby sharing is not available in this build.');
+  }
+  return Native;
+}
 
 // ─── High-level API ────────────────────────────────────────
 
@@ -55,14 +67,18 @@ class BeamNearby {
     return this._state;
   }
 
+  get isAvailable(): boolean {
+    return !!Native;
+  }
+
   async startBroadcasting(displayName: string, domainToken: string): Promise<void> {
-    await Native.startBroadcasting(displayName, domainToken);
+    await requireBeamNearby().startBroadcasting(displayName, domainToken);
     this._state = 'broadcasting';
     this.callbacks.onStateChange?.('broadcasting');
   }
 
   async startScanning(displayName: string): Promise<void> {
-    await Native.startScanning(displayName);
+    await requireBeamNearby().startScanning(displayName);
     this._state = 'scanning';
     this.callbacks.onStateChange?.('scanning');
   }
@@ -70,21 +86,21 @@ class BeamNearby {
   async acceptInvite(peerDisplayName: string): Promise<void> {
     this._state = 'connecting';
     this.callbacks.onStateChange?.('connecting');
-    await Native.acceptInvite(peerDisplayName);
+    await requireBeamNearby().acceptInvite(peerDisplayName);
   }
 
   async sendDomain(domainToken: string): Promise<void> {
-    await Native.sendDomain(domainToken);
+    await requireBeamNearby().sendDomain(domainToken);
   }
 
   async stop(): Promise<void> {
-    await Native.stop();
+    await Native?.stop();
     this._state = 'idle';
     this.callbacks.onStateChange?.('idle');
   }
 
   async getDiscoveredPeers(): Promise<string[]> {
-    return Native.getDiscoveredPeers();
+    return Native?.getDiscoveredPeers() ?? [];
   }
 
   on(callbacks: NearbyCallbacks): void {
@@ -96,6 +112,10 @@ class BeamNearby {
   }
 
   setupNativeListeners(): () => void {
+    if (!Native) {
+      return () => {};
+    }
+
     const subs: EventSubscription[] = [
       Native.addListener('onPeerFound', (peer) => {
         this.callbacks.onPeerFound?.(peer);

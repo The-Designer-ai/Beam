@@ -178,5 +178,5 @@ export function handleInviteLink(url: string): string | null {
 
 export function isNearbySupported(): boolean {
   // Multipeer Connectivity is iOS-only
-  return Platform.OS === 'ios';
+  return Platform.OS === 'ios' && nearby.isAvailable;
 }

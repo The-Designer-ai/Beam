@@ -1,6 +1,7 @@
 import { DynamicColorIOS, Platform } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { colors } from '../../lib/theme';
+import { canUseLiquidGlass } from '../../components/LiquidGlassButton';
 
 const defaultTabColor = Platform.OS === 'ios'
   ? DynamicColorIOS({ light: colors.textTertiary, dark: '#A1A1A6' })
@@ -11,8 +12,17 @@ const selectedTabColor = Platform.OS === 'ios'
   : colors.primary;
 
 export default function TabLayout() {
+  const liquidGlassEnabled = canUseLiquidGlass();
+  const fallbackTabBackground = Platform.OS === 'ios'
+    ? DynamicColorIOS({ light: colors.bgSecondary, dark: '#1C1C1E' })
+    : colors.bgSecondary;
+
   return (
     <NativeTabs
+      backgroundColor={liquidGlassEnabled ? undefined : fallbackTabBackground}
+      blurEffect={liquidGlassEnabled ? 'systemDefault' : 'none'}
+      disableTransparentOnScrollEdge={!liquidGlassEnabled}
+      minimizeBehavior="never"
       tintColor={selectedTabColor}
       iconColor={{ default: defaultTabColor, selected: selectedTabColor }}
       labelStyle={{

@@ -51,7 +51,7 @@ export function BeamButton({
 
   return (
     <Host
-      matchContents={stretches ? { vertical: true } : true}
+      matchContents={stretches ? false : { horizontal: true }}
       style={[styles.host, styles[size], style]}
       seedColor={nativeTint}
     >
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   host: {
     justifyContent: 'center',
   },
-  sm: { minHeight: 44 },
-  md: { minHeight: 48 },
-  lg: { minHeight: 54 },
+  sm: { height: 44 },
+  md: { height: 48 },
+  lg: { height: 54 },
 });

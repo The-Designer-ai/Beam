@@ -189,7 +189,13 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
         ) : offeringsError ? (
           <View style={styles.errorContainer}>
             <Text style={[typography.body, styles.errorText]}>{offeringsError}</Text>
-            <BeamButton title="Try Again" onPress={loadOfferings} variant="secondary" />
+            <BeamButton
+              title="Try Again"
+              onPress={loadOfferings}
+              variant="secondary"
+              iosSystemImage="arrow.clockwise"
+              style={styles.fullWidth}
+            />
           </View>
         ) : (
           <>
@@ -281,10 +287,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.lg,
     paddingVertical: spacing.xxxl,
+    width: '100%',
   },
   errorText: {
     color: colors.textSecondary,
     textAlign: 'center',
+    width: '100%',
   },
   featureList: {
     gap: spacing.xs,

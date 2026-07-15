@@ -249,29 +249,33 @@ export default function DevicesScreen() {
             </Text>
 
             {!showNearbyUI ? (
-              <Glass style={styles.nearbyActions}>
-                <BeamButton
-                  title="Share My Domain"
-                  onPress={handleShareDomain}
-                  icon={<AppIcon ios="square.and.arrow.up" android="share" size={18} color={colors.textInverse} />}
-                  iosSystemImage="square.and.arrow.up"
-                  variant="primary"
-                  style={styles.nearbyButton}
-                  disabled={!isNearbySupported()}
-                />
-                <BeamButton
-                  title="Scan for Nearby"
-                  onPress={handleScanNearby}
-                  icon={<AppIcon ios="viewfinder" android="search" size={18} color={colors.primary} />}
-                  iosSystemImage="viewfinder"
-                  variant="secondary"
-                  style={styles.nearbyButton}
-                  disabled={!isNearbySupported()}
-                />
+              <Glass contentStyle={styles.nearbyActionsContent}>
+                <View style={styles.nearbyActionSlot}>
+                  <BeamButton
+                    title="Share My Domain"
+                    onPress={handleShareDomain}
+                    icon={<AppIcon ios="square.and.arrow.up" android="share" size={18} color={colors.textInverse} />}
+                    iosSystemImage="square.and.arrow.up"
+                    variant="primary"
+                    style={styles.nearbyButton}
+                    disabled={!isNearbySupported()}
+                  />
+                </View>
+                <View style={styles.nearbyActionSlot}>
+                  <BeamButton
+                    title="Scan for Nearby"
+                    onPress={handleScanNearby}
+                    icon={<AppIcon ios="viewfinder" android="search" size={18} color={colors.primary} />}
+                    iosSystemImage="viewfinder"
+                    variant="secondary"
+                    style={styles.nearbyButton}
+                    disabled={!isNearbySupported()}
+                  />
+                </View>
               </Glass>
             ) : (
               /* ─── Nearby Active UI ───────────────────────────── */
-              <Glass style={styles.nearbyActive}>
+              <Glass contentStyle={styles.nearbyActive}>
                 <View style={styles.nearbyStatusTitle}>
                   <AppIcon
                     ios={nearbyState === 'connected' ? 'checkmark.circle.fill' : nearbyState === 'error' ? 'exclamationmark.triangle.fill' : nearbyState === 'scanning' ? 'viewfinder' : 'antenna.radiowaves.left.and.right'}
@@ -334,19 +338,19 @@ export default function DevicesScreen() {
                 />
               </Glass>
             )}
+
+            <View style={styles.createRoom}>
+              <BeamButton
+                title="Create Room"
+                onPress={() => router.push('/(tabs)/cast')}
+                icon={<AppIcon ios="plus" android="add" size={18} color={colors.textInverse} />}
+                iosSystemImage="plus"
+                style={styles.createRoomButton}
+              />
+            </View>
           </View>
         }
       />
-
-      <View style={styles.fab}>
-        <BeamButton
-          title="Create Room"
-          onPress={() => router.push('/(tabs)/cast')}
-          icon={<AppIcon ios="plus" android="add" size={18} color={colors.textInverse} />}
-          iosSystemImage="plus"
-          style={styles.fabButton}
-        />
-      </View>
     </SafeAreaView>
   );
 }
@@ -363,21 +367,12 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing.xxl,
-    paddingBottom: 120,
+    paddingBottom: spacing.xxxl,
   },
   empty: {
     padding: spacing.xxl,
     marginTop: spacing.xxl,
     alignItems: 'center',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 100,
-    left: spacing.xxl,
-    right: spacing.xxl,
-  },
-  fabButton: {
-    width: '100%',
   },
   // ── Nearby Section ───────────────────────────────────────
   nearbySection: {
@@ -386,9 +381,13 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.separator,
   },
-  nearbyActions: {
+  nearbyActionsContent: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  nearbyActionSlot: {
+    width: '100%',
+    minHeight: 48,
   },
   nearbyButton: {
     width: '100%',
@@ -426,5 +425,12 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     minWidth: 120,
+  },
+  createRoom: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  createRoomButton: {
+    width: '100%',
   },
 });

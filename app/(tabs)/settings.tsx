@@ -231,16 +231,17 @@ export default function SettingsScreen() {
         </Glass>
 
         {/* Sign Out */}
-        <BeamButton
-          title="Sign Out"
-          onPress={handleLogout}
-          variant="secondary"
-          icon={<AppIcon ios="rectangle.portrait.and.arrow.right" android="logout" size={18} color={colors.error} />}
-          iosSystemImage="rectangle.portrait.and.arrow.right"
-          role="destructive"
-          textStyle={{ color: colors.error }}
-          style={{ marginTop: spacing.lg }}
-        />
+        <View style={styles.signOutSlot}>
+          <BeamButton
+            title="Sign Out"
+            onPress={handleLogout}
+            variant="secondary"
+            icon={<AppIcon ios="rectangle.portrait.and.arrow.right" android="logout" size={18} color={colors.error} />}
+            iosSystemImage="rectangle.portrait.and.arrow.right"
+            role="destructive"
+            textStyle={{ color: colors.error }}
+          />
+        </View>
 
         <Text style={[typography.caption2, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.xxl }]}>
           Beam v1.0.0
@@ -272,7 +273,6 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: spacing.md,
-    padding: spacing.lg,
   },
   profileRow: {
     flexDirection: 'row',
@@ -312,5 +312,11 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.separator,
+  },
+  signOutSlot: {
+    minHeight: 48,
+    marginTop: spacing.lg,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
 });

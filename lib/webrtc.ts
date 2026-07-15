@@ -38,6 +38,7 @@ export class WebRTCManager {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private callbacks: PeerConnectionCallbacks;
+  private disposed = false;
 
   constructor(callbacks: PeerConnectionCallbacks) {
     this.callbacks = callbacks;
@@ -46,8 +47,18 @@ export class WebRTCManager {
   // ─── Create a PeerConnection (called by sender) ────────────────
 
   async createOffer(): Promise<WebRTCSessionDescriptionInit> {
+    if (this.disposed) throw new Error('Cast session was cancelled');
     this.pc = this.createPeerConnection();
-    this.localStream = await mediaDevices.getDisplayMedia();
+    const stream = await mediaDevices.getDisplayMedia();
+
+    // The iOS broadcast picker resolves asynchronously. If the user stopped
+    // while it was open, immediately release the late stream.
+    if (this.disposed) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error('Cast session was cancelled');
+    }
+
+    this.localStream = stream;
 
     this.localStream.getTracks().forEach((track) => {
       this.pc?.addTrack(track, this.localStream!);
@@ -95,6 +106,7 @@ export class WebRTCManager {
   // ─── Cleanup ───────────────────────────────────────────────────
 
   dispose(): void {
+    this.disposed = true;
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.localStream = null;
     this.pc?.close();

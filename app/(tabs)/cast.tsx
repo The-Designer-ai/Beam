@@ -26,11 +26,17 @@ export default function CastScreen() {
   const [status, setStatus] = useState<string>('');
   const [loadingDevices, setLoadingDevices] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [startingDeviceId, setStartingDeviceId] = useState<string | null>(null);
   const webrtcRef = useRef<WebRTCManager | null>(null);
+  const castSessionRef = useRef(0);
 
   useEffect(() => {
     loadDevices();
-    return () => webrtcRef.current?.dispose();
+    return () => {
+      castSessionRef.current += 1;
+      webrtcRef.current?.dispose();
+      webrtcRef.current = null;
+    };
   }, []);
 
   async function loadDevices() {
@@ -47,6 +53,14 @@ export default function CastScreen() {
   }
 
   async function startScreenCast(device: Device) {
+    if (startingDeviceId) return;
+
+    const sessionId = castSessionRef.current + 1;
+    castSessionRef.current = sessionId;
+    webrtcRef.current?.dispose();
+    webrtcRef.current = null;
+
+    setStartingDeviceId(device.id);
     setTargetDevice(device);
     setStatus('Connecting...');
     setIsCasting(true);
@@ -70,6 +84,7 @@ export default function CastScreen() {
           setStatus('Streaming live');
         },
         onState: (state) => {
+          if (castSessionRef.current !== sessionId) return;
           setStatus(state === 'connected' ? 'Streaming' : state);
           if (state === 'failed' || state === 'disconnected') {
             setIsCasting(false);
@@ -77,13 +92,17 @@ export default function CastScreen() {
           }
         },
         onError: (err) => {
+          if (castSessionRef.current !== sessionId) return;
           console.warn('WebRTC:', err.message);
         },
       });
-      webrtcRef.current?.dispose();
       webrtcRef.current = webrtc;
 
       const offer = await webrtc.createOffer();
+      if (castSessionRef.current !== sessionId) {
+        webrtc.dispose();
+        return;
+      }
 
       // ═══ SIGNALING — Replace with Supabase Realtime when MCP connected ═══
       // const signaling = createSignaling();
@@ -95,19 +114,28 @@ export default function CastScreen() {
       // For dev testing without a signaling server, show the offer
       console.log('[Beam] Offer created. Signaling server needed to complete connection.');
     } catch (err: any) {
+      if (castSessionRef.current !== sessionId) return;
+      webrtcRef.current?.dispose();
+      webrtcRef.current = null;
       Alert.alert('Cast Failed', err.message);
       setIsCasting(false);
       setTargetDevice(null);
       setStatus('');
+    } finally {
+      if (castSessionRef.current === sessionId) {
+        setStartingDeviceId(null);
+      }
     }
   }
 
   function stopCast() {
+    castSessionRef.current += 1;
     webrtcRef.current?.dispose();
     webrtcRef.current = null;
     setIsCasting(false);
     setTargetDevice(null);
     setStatus('');
+    setStartingDeviceId(null);
   }
 
   return (
@@ -181,7 +209,7 @@ export default function CastScreen() {
             <DeviceCard
               key={device.id}
               device={device}
-              onPress={() => startScreenCast(device)}
+              onPress={startingDeviceId ? undefined : () => startScreenCast(device)}
             />
           ))}
       </Animated.ScrollView>

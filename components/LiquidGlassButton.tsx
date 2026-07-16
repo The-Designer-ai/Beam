@@ -112,16 +112,15 @@ export function LiquidGlassButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 50,
+    height: 50,
     borderRadius: radius.md,
     overflow: 'hidden',
   },
   compactButton: {
-    minHeight: 44,
+    height: 44,
   },
   content: {
     flex: 1,
-    minHeight: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,

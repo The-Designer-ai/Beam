@@ -321,11 +321,14 @@ const styles = StyleSheet.create({
   utilityRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    height: 44,
   },
   utilityButton: {
     flex: 1,
+    height: 44,
   },
   dismissButton: {
     width: '100%',
+    height: 44,
   },
 });

@@ -47,6 +47,7 @@ export default function SettingsScreen() {
 
     // Check RevenueCat for latest subscription status
     try {
+      await initRevenueCat(u?.id);
       const { isPro } = await checkProStatus();
       if (isPro && sub?.type !== 'pro') {
         setSubscription({ type: 'pro' });

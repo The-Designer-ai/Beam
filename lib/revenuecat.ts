@@ -18,6 +18,7 @@ import { storeSubscription } from './store';
 
 const API_KEY = 'test_KxgGlPAZWCvNcfEEGROZUnOaGpV';
 const ENTITLEMENT_ID = 'Beam Pro';
+let revenueCatConfigured = false;
 
 // ─── Product identifiers (must match RevenueCat dashboard) ─
 export const PRODUCT_IDS = {
@@ -29,10 +30,13 @@ export const PRODUCT_IDS = {
 // ─── Configure RevenueCat SDK ─────────────────────────────
 
 export async function initRevenueCat(userId?: string): Promise<void> {
+  if (revenueCatConfigured) return;
+
   await Purchases.configure({
     apiKey: API_KEY,
     appUserID: userId,
   });
+  revenueCatConfigured = true;
 
   // Enable automatic paywall presentation
   await Purchases.setAttributes({
@@ -49,6 +53,7 @@ export async function getOfferings(): Promise<{
   lifetime: PurchasesPackage | null;
   currentOffering: PurchasesOffering | null;
 }> {
+  await initRevenueCat();
   const offerings = await Purchases.getOfferings();
   const current = offerings.current;
 
@@ -65,6 +70,7 @@ export async function getOfferings(): Promise<{
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<{ customerInfo: CustomerInfo; isPro: boolean }> {
+  await initRevenueCat();
   const { customerInfo } = await Purchases.purchasePackage(pkg);
   const isPro = await syncSubscription(customerInfo);
   return { customerInfo, isPro };
@@ -76,6 +82,7 @@ export async function restorePurchases(): Promise<{
   customerInfo: CustomerInfo;
   isPro: boolean;
 }> {
+  await initRevenueCat();
   const customerInfo = await Purchases.restorePurchases();
   const isPro = await syncSubscription(customerInfo);
   return { customerInfo, isPro };
@@ -88,6 +95,7 @@ export async function checkProStatus(): Promise<{
   customerInfo: CustomerInfo | null;
 }> {
   try {
+    await initRevenueCat();
     const customerInfo = await Purchases.getCustomerInfo();
     const isPro = await syncSubscription(customerInfo);
     return { isPro, customerInfo };
@@ -101,6 +109,7 @@ export async function checkProStatus(): Promise<{
 
 export async function presentPaywall(): Promise<boolean> {
   try {
+    await initRevenueCat();
     const result = await RevenueCatUI.presentPaywallIfNeeded({
       requiredEntitlementIdentifier: ENTITLEMENT_ID,
     });
@@ -122,6 +131,7 @@ export async function presentPaywall(): Promise<boolean> {
 // Native RevenueCat UI for managing subscription
 
 export async function presentCustomerCenter(): Promise<void> {
+  await initRevenueCat();
   await RevenueCatUI.presentCustomerCenter();
 }
 
@@ -129,6 +139,7 @@ export async function presentCustomerCenter(): Promise<void> {
 
 export async function getCustomerInfo(): Promise<CustomerInfo | null> {
   try {
+    await initRevenueCat();
     return await Purchases.getCustomerInfo();
   } catch {
     return null;
@@ -153,6 +164,7 @@ export async function logInRevenueCat(userId: string): Promise<{
   customerInfo: CustomerInfo;
   created: boolean;
 }> {
+  await initRevenueCat();
   const result = await Purchases.logIn(userId);
   return result;
 }
@@ -160,6 +172,7 @@ export async function logInRevenueCat(userId: string): Promise<{
 // ─── Log out ───────────────────────────────────────────────
 
 export async function logOutRevenueCat(): Promise<CustomerInfo> {
+  await initRevenueCat();
   return await Purchases.logOut();
 }
 

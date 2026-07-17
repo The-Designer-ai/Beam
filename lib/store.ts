@@ -64,7 +64,19 @@ export async function storeRooms(rooms: Room[]): Promise<void> {
 
 // ─── Subscription ──────────────────────────────────────────────────
 export async function getSubscription(): Promise<SubscriptionTier | null> {
-  return parseStoredValue<SubscriptionTier | null>(KEYS.SUBSCRIPTION, null);
+  type LegacySubscriptionTier = Omit<SubscriptionTier, 'type'> & { type: 'free' | 'plus' | 'pro' };
+  const subscription = await parseStoredValue<LegacySubscriptionTier | null>(
+    KEYS.SUBSCRIPTION,
+    null,
+  );
+
+  if (subscription?.type === 'pro') {
+    const migrated: SubscriptionTier = { ...subscription, type: 'plus' };
+    await storeSubscription(migrated);
+    return migrated;
+  }
+
+  return subscription as SubscriptionTier | null;
 }
 
 export async function storeSubscription(sub: SubscriptionTier): Promise<void> {

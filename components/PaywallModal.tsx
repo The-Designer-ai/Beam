@@ -26,7 +26,7 @@ import {
 interface PaywallModalProps {
   visible: boolean;
   onClose: () => void;
-  onPurchaseComplete: (isPro: boolean) => void;
+  onPurchaseComplete: (isPlus: boolean) => void;
 }
 
 const features = [
@@ -74,8 +74,8 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
 
     setLoading(label);
     try {
-      const { isPro } = await purchasePackage(pkg);
-      if (isPro) {
+      const { isPlus } = await purchasePackage(pkg);
+      if (isPlus) {
         onPurchaseComplete(true);
         onClose();
       }
@@ -91,12 +91,12 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
   async function handleRestore() {
     setLoading('restore');
     try {
-      const { isPro } = await restorePurchases();
-      if (isPro) {
+      const { isPlus } = await restorePurchases();
+      if (isPlus) {
         onPurchaseComplete(true);
         onClose();
       } else {
-        Alert.alert('No Purchase Found', 'No active Beam Pro purchase was found.');
+        Alert.alert('No Purchase Found', 'No active Beam Plus purchase was found.');
       }
     } catch (error: any) {
       Alert.alert('Restore Failed', error?.message || 'Purchases could not be restored.');
@@ -176,7 +176,7 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <Text style={[typography.largeTitle, styles.title]}>Beam Pro</Text>
+        <Text style={[typography.largeTitle, styles.title]}>Beam Plus</Text>
         <Text style={[typography.body, styles.subtitle]}>
           Cast your screen anywhere, to anyone, in 4K.
         </Text>

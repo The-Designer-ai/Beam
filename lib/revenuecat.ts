@@ -2,29 +2,29 @@
 // lib/revenuecat.ts — RevenueCat SDK integration
 // Official SDK: react-native-purchases + react-native-purchases-ui
 // Products configured in RevenueCat dashboard:
-//   - beam_pro_lifetime (lifetime)
-//   - beam_pro_yearly   (annual)
-//   - beam_pro_monthly  (monthly)
-// Entitlement: Beam Pro
+//   - beam_plus_lifetime (lifetime)
+//   - beam_plus_yearly   (annual)
+//   - beam_plus_monthly  (monthly)
+// Entitlement: Beam Plus
 // ───────────────────────────────────────────────────────────
 
 import Purchases, {
   CustomerInfo,
   PurchasesOffering,
   PurchasesPackage,
-} from 'react-native-purchases';
-import RevenueCatUI from 'react-native-purchases-ui';
-import { storeSubscription } from './store';
+} from "react-native-purchases";
+import RevenueCatUI from "react-native-purchases-ui";
+import { storeSubscription } from "./store";
 
-const API_KEY = 'test_KxgGlPAZWCvNcfEEGROZUnOaGpV';
-const ENTITLEMENT_ID = 'Beam Pro';
+const API_KEY = "appl_USpIgxxmRglPrbylIuMYmYfaNRK";
+const ENTITLEMENT_ID = "Beam Plus";
 let revenueCatConfigured = false;
 
 // ─── Product identifiers (must match RevenueCat dashboard) ─
 export const PRODUCT_IDS = {
-  MONTHLY: 'beam_pro_monthly',
-  YEARLY: 'beam_pro_yearly',
-  LIFETIME: 'beam_pro_lifetime',
+  MONTHLY: "beam_plus_monthly",
+  YEARLY: "beam_plus_yearly",
+  LIFETIME: "beam_plus_lifetime",
 } as const;
 
 // ─── Configure RevenueCat SDK ─────────────────────────────
@@ -40,8 +40,8 @@ export async function initRevenueCat(userId?: string): Promise<void> {
 
   // Enable automatic paywall presentation
   await Purchases.setAttributes({
-    platform: 'ios',
-    framework: 'react-native',
+    platform: "ios",
+    framework: "react-native",
   });
 }
 
@@ -69,38 +69,38 @@ export async function getOfferings(): Promise<{
 
 export async function purchasePackage(
   pkg: PurchasesPackage,
-): Promise<{ customerInfo: CustomerInfo; isPro: boolean }> {
+): Promise<{ customerInfo: CustomerInfo; isPlus: boolean }> {
   await initRevenueCat();
   const { customerInfo } = await Purchases.purchasePackage(pkg);
-  const isPro = await syncSubscription(customerInfo);
-  return { customerInfo, isPro };
+  const isPlus = await syncSubscription(customerInfo);
+  return { customerInfo, isPlus };
 }
 
 // ─── Restore purchases ─────────────────────────────────────
 
 export async function restorePurchases(): Promise<{
   customerInfo: CustomerInfo;
-  isPro: boolean;
+  isPlus: boolean;
 }> {
   await initRevenueCat();
   const customerInfo = await Purchases.restorePurchases();
-  const isPro = await syncSubscription(customerInfo);
-  return { customerInfo, isPro };
+  const isPlus = await syncSubscription(customerInfo);
+  return { customerInfo, isPlus };
 }
 
-// ─── Check if user has active Pro entitlement ──────────────
+// ─── Check if user has active Plus entitlement ─────────────
 
-export async function checkProStatus(): Promise<{
-  isPro: boolean;
+export async function checkPlusStatus(): Promise<{
+  isPlus: boolean;
   customerInfo: CustomerInfo | null;
 }> {
   try {
     await initRevenueCat();
     const customerInfo = await Purchases.getCustomerInfo();
-    const isPro = await syncSubscription(customerInfo);
-    return { isPro, customerInfo };
+    const isPlus = await syncSubscription(customerInfo);
+    return { isPlus, customerInfo };
   } catch {
-    return { isPro: false, customerInfo: null };
+    return { isPlus: false, customerInfo: null };
   }
 }
 
@@ -113,7 +113,7 @@ export async function presentPaywall(): Promise<boolean> {
     const result = await RevenueCatUI.presentPaywallIfNeeded({
       requiredEntitlementIdentifier: ENTITLEMENT_ID,
     });
-    if (result === 'PURCHASED' || result === 'RESTORED') {
+    if (result === "PURCHASED" || result === "RESTORED") {
       const info = await Purchases.getCustomerInfo();
       await syncSubscription(info);
       return true;
@@ -180,10 +180,10 @@ export async function logOutRevenueCat(): Promise<CustomerInfo> {
 
 async function syncSubscription(customerInfo: CustomerInfo): Promise<boolean> {
   const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
-  const isPro = entitlement !== undefined;
+  const isPlus = entitlement !== undefined;
 
   await storeSubscription({
-    type: isPro ? 'pro' : 'free',
+    type: isPlus ? "plus" : "free",
     expiresAt: entitlement?.expirationDate
       ? new Date(entitlement.expirationDate).getTime()
       : undefined,
@@ -191,7 +191,7 @@ async function syncSubscription(customerInfo: CustomerInfo): Promise<boolean> {
     latestPurchaseDate: entitlement?.latestPurchaseDate,
   });
 
-  return isPro;
+  return isPlus;
 }
 
 // ─── Types ─────────────────────────────────────────────────

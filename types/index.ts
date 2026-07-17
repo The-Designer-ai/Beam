@@ -23,7 +23,7 @@ export interface Room {
 }
 
 export interface SubscriptionTier {
-  type: 'free' | 'pro';
+  type: 'free' | 'plus';
   expiresAt?: number;
   productIdentifier?: string;
   latestPurchaseDate?: string;

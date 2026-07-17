@@ -12,7 +12,7 @@ import { getStoredUser, clearUser, getSubscription, storeSubscription } from '..
 import { User, SubscriptionTier } from '../../types';
 import {
   initRevenueCat,
-  checkProStatus,
+  checkPlusStatus,
   restorePurchases,
   logOutRevenueCat,
 } from '../../lib/revenuecat';
@@ -48,9 +48,9 @@ export default function SettingsScreen() {
     // Check RevenueCat for latest subscription status
     try {
       await initRevenueCat(u?.id);
-      const { isPro } = await checkProStatus();
-      if (isPro && sub?.type !== 'pro') {
-        setSubscription({ type: 'pro' });
+      const { isPlus } = await checkPlusStatus();
+      if (isPlus && sub?.type !== 'plus') {
+        setSubscription({ type: 'plus' });
       }
     } catch {
       // RevenueCat not configured yet — use local state
@@ -99,21 +99,21 @@ export default function SettingsScreen() {
     ]);
   }
 
-  async function handlePurchaseComplete(isPro: boolean) {
-    if (isPro) {
-      setSubscription({ type: 'pro' });
+  async function handlePurchaseComplete(isPlus: boolean) {
+    if (isPlus) {
+      setSubscription({ type: 'plus' });
       setShowPaywall(false);
-      Alert.alert('Welcome to Pro!', 'You now have unlimited devices and remote casting.');
+      Alert.alert('Welcome to Beam Plus!', 'You now have unlimited devices and remote casting.');
     }
   }
 
   async function handleRestore() {
     setPaywallLoading(true);
     try {
-      const { isPro } = await restorePurchases();
-      if (isPro) {
-        setSubscription({ type: 'pro' });
-        Alert.alert('Restored', 'Your Pro subscription has been restored.');
+      const { isPlus } = await restorePurchases();
+      if (isPlus) {
+        setSubscription({ type: 'plus' });
+        Alert.alert('Restored', 'Your Beam Plus subscription has been restored.');
       } else {
         Alert.alert('No Purchase Found', 'No active subscription was found to restore.');
       }
@@ -124,7 +124,7 @@ export default function SettingsScreen() {
     }
   }
 
-  const isPro = subscription?.type === 'pro';
+  const isPlus = subscription?.type === 'plus';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -158,16 +158,16 @@ export default function SettingsScreen() {
           <View style={styles.subRow}>
             <View>
               <Text style={styles.sectionTitle}>Subscription</Text>
-              <Text style={[typography.headline, { color: isPro ? colors.primary : colors.text }]}>
-                {isPro ? 'Beam Pro' : 'Free'}
+              <Text style={[typography.headline, { color: isPlus ? colors.primary : colors.text }]}>
+                {isPlus ? 'Beam Plus' : 'Free'}
               </Text>
-              {isPro && (
+              {isPlus && (
                 <Text style={[typography.caption1, { color: colors.textTertiary }]}>
                   Unlimited devices · Remote casting · 4K
                 </Text>
               )}
             </View>
-            {!isPro && (
+            {!isPlus && (
               <BeamButton
                 title="Upgrade"
                 onPress={() => setShowPaywall(true)}
@@ -177,7 +177,7 @@ export default function SettingsScreen() {
               />
             )}
           </View>
-          {isPro && (
+          {isPlus && (
             <BeamButton
               title="Manage Subscription"
               onPress={() => setShowPaywall(true)}
@@ -197,21 +197,21 @@ export default function SettingsScreen() {
           <View style={styles.featureRow}>
             <Text style={[typography.body]}>Devices</Text>
             <Text style={[typography.subhead, { color: colors.textSecondary }]}>
-              {isPro ? 'Unlimited' : '2 max'}
+              {isPlus ? 'Unlimited' : '2 max'}
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.featureRow}>
             <Text style={[typography.body]}>Remote Casting</Text>
-            <Text style={[typography.subhead, { color: isPro ? colors.textSecondary : colors.textTertiary }]}>
-              {isPro ? 'Enabled' : 'Same network only'}
+            <Text style={[typography.subhead, { color: isPlus ? colors.textSecondary : colors.textTertiary }]}>
+              {isPlus ? 'Enabled' : 'Same network only'}
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.featureRow}>
             <Text style={[typography.body]}>Max Quality</Text>
-            <Text style={[typography.subhead, { color: isPro ? colors.textSecondary : colors.textTertiary }]}>
-              {isPro ? '4K' : '720p'}
+            <Text style={[typography.subhead, { color: isPlus ? colors.textSecondary : colors.textTertiary }]}>
+              {isPlus ? '4K' : '720p'}
             </Text>
           </View>
         </Glass>

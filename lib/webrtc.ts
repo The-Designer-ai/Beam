@@ -32,6 +32,7 @@ export interface PeerConnectionCallbacks {
   onStream: (stream: MediaStream) => void;
   onState: (state: ConnectionState) => void;
   onError: (error: Error) => void;
+  onIceCandidate?: (candidate: RTCIceCandidateInit) => void;
 }
 
 export class WebRTCManager {
@@ -46,10 +47,10 @@ export class WebRTCManager {
 
   // ─── Create a PeerConnection (called by sender) ────────────────
 
-  async createOffer(): Promise<WebRTCSessionDescriptionInit> {
+  async createOffer(existingStream?: MediaStream): Promise<WebRTCSessionDescriptionInit> {
     if (this.disposed) throw new Error('Cast session was cancelled');
     this.pc = this.createPeerConnection();
-    const stream = await mediaDevices.getDisplayMedia();
+    const stream = existingStream || await mediaDevices.getDisplayMedia();
 
     // The iOS broadcast picker resolves asynchronously. If the user stopped
     // while it was open, immediately release the late stream.
@@ -123,7 +124,7 @@ export class WebRTCManager {
 
     eventTarget.addEventListener('icecandidate', (event) => {
       if (event.candidate) {
-        this.callbacks.onError(new Error('ICE_CANDIDATE')); // Signal to parent
+        this.callbacks.onIceCandidate?.(event.candidate.toJSON());
       }
     });
 

@@ -59,7 +59,9 @@ export function PaywallModal({ visible, onClose, onPurchaseComplete }: PaywallMo
     try {
       const result = await getOfferings();
       setOfferings(result);
-    } catch {
+    } catch (error) {
+      // TODO: Remove after RevenueCat/App Store product loading is verified.
+      console.warn('[RevenueCat] Failed to load offerings', error);
       setOfferingsError('Plans could not be loaded. Check your connection and try again.');
     } finally {
       setFetchingOfferings(false);

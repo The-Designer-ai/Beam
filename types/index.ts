@@ -4,6 +4,8 @@ export interface Device {
   type: 'ios' | 'android' | 'web';
   online: boolean;
   lastSeen: number;
+  ownerId?: string;
+  pushToken?: string;
 }
 
 export interface User {
@@ -30,8 +32,8 @@ export interface SubscriptionTier {
 }
 
 export type SignalMessage =
-  | { type: 'offer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'answer'; sdp: RTCSessionDescriptionInit }
+  | { type: 'offer'; sdp: any }
+  | { type: 'answer'; sdp: any }
   | { type: 'ice'; candidate: RTCIceCandidateInit }
   | { type: 'join'; roomCode: string; userId: string }
   | { type: 'leave'; roomCode: string; userId: string }

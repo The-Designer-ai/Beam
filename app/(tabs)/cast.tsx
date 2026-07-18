@@ -1,141 +1,179 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { mediaDevices, MediaStream, RTCView } from 'react-native-webrtc';
 import { Glass } from '../../components/Glass';
-import { DeviceCard } from '../../components/DeviceCard';
 import { BeamButton } from '../../components/BeamButton';
 import { AppIcon } from '../../components/AppIcon';
-import { colors, typography, spacing } from '../../lib/theme';
-import { Device, SignalingProvider, SignalMessage } from '../../types';
+import { colors, typography, spacing, radius } from '../../lib/theme';
+import { Device } from '../../types';
 import { WebRTCManager } from '../../lib/webrtc';
-import { createSignaling } from '../../lib/signaling';
-import { getStoredDevices } from '../../lib/store';
-import { getStoredPushToken, sendNotification } from '../../lib/notifications';
+import {
+  createCastSession,
+  endCastSession,
+  listSavedDevices,
+  listSessionRequests,
+  sendSignal,
+  subscribeToSessionRequests,
+} from '../../lib/beam';
+import { sendNotification } from '../../lib/notifications';
 
-const MOCK_DEVICES: Device[] = [
-  { id: '1', name: "Andy's iPhone", type: 'ios', online: true, lastSeen: Date.now() },
-  { id: '2', name: "Andy's iPad", type: 'ios', online: true, lastSeen: Date.now() - 60000 },
-  { id: '3', name: "Andy's MacBook", type: 'web', online: false, lastSeen: Date.now() - 3600000 },
-];
+type CastPhase = 'selecting' | 'waiting' | 'casting';
 
 export default function CastScreen() {
+  const { deviceId } = useLocalSearchParams<{ deviceId?: string }>();
   const [devices, setDevices] = useState<Device[]>([]);
-  const [isCasting, setIsCasting] = useState(false);
-  const [targetDevice, setTargetDevice] = useState<Device | null>(null);
-  const [status, setStatus] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<string[]>(deviceId ? [deviceId] : []);
+  const [phase, setPhase] = useState<CastPhase>('selecting');
+  const [status, setStatus] = useState('');
   const [loadingDevices, setLoadingDevices] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [startingDeviceId, setStartingDeviceId] = useState<string | null>(null);
-  const webrtcRef = useRef<WebRTCManager | null>(null);
-  const castSessionRef = useRef(0);
+  const [localStreamURL, setLocalStreamURL] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const senderDeviceIdRef = useRef<string | null>(null);
+  const peerRefs = useRef<Record<string, WebRTCManager>>({});
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const offeredRequestIdsRef = useRef<Set<string>>(new Set());
+
+  const selectedDevices = useMemo(
+    () => devices.filter((device) => selectedIds.includes(device.id)),
+    [devices, selectedIds],
+  );
 
   useEffect(() => {
     loadDevices();
     return () => {
-      castSessionRef.current += 1;
-      webrtcRef.current?.dispose();
-      webrtcRef.current = null;
+      stopCast(false);
     };
   }, []);
 
   async function loadDevices() {
     setLoadingDevices(true);
-    setLoadError('');
     try {
-      const stored = await getStoredDevices();
-      setDevices(stored.length > 0 ? stored : MOCK_DEVICES);
-    } catch {
-      setLoadError('Could not load your devices.');
+      const loaded = await listSavedDevices();
+      setDevices(loaded);
+      if (deviceId) setSelectedIds([deviceId]);
+    } catch (error: any) {
+      Alert.alert('Devices Error', error.message || 'Could not load devices.');
     } finally {
       setLoadingDevices(false);
     }
   }
 
-  async function startScreenCast(device: Device) {
-    if (startingDeviceId) return;
+  function toggleDevice(device: Device) {
+    if (!device.online || phase !== 'selecting') return;
+    setSelectedIds((current) =>
+      current.includes(device.id)
+        ? current.filter((id) => id !== device.id)
+        : [...current, device.id],
+    );
+  }
 
-    const sessionId = castSessionRef.current + 1;
-    castSessionRef.current = sessionId;
-    webrtcRef.current?.dispose();
-    webrtcRef.current = null;
+  async function startRequest() {
+    if (selectedIds.length === 0) {
+      Alert.alert('Select Devices', 'Choose at least one online device to cast to.');
+      return;
+    }
 
-    setStartingDeviceId(device.id);
-    setTargetDevice(device);
-    setStatus('Connecting...');
-    setIsCasting(true);
-
-    // Send push notification to the target device
-    // ═══ Replace with Supabase-powered push when MCP connected ═══
-    getStoredPushToken().then((token) => {
-      if (token) {
-        sendNotification(
-          token,
-          'Beam Cast',
-          `${device.name} is casting to you`,
-          { type: 'cast_started', from: device.name }
-        );
-      }
-    });
+    setPhase('waiting');
+    setStatus('Waiting for selected devices to accept...');
+    offeredRequestIdsRef.current.clear();
 
     try {
-      const webrtc = new WebRTCManager({
-        onStream: (stream) => {
-          setStatus('Streaming live');
-        },
-        onState: (state) => {
-          if (castSessionRef.current !== sessionId) return;
-          setStatus(state === 'connected' ? 'Streaming' : state);
-          if (state === 'failed' || state === 'disconnected') {
-            setIsCasting(false);
-            setTargetDevice(null);
-          }
-        },
-        onError: (err) => {
-          if (castSessionRef.current !== sessionId) return;
-          console.warn('WebRTC:', err.message);
-        },
+      const { sessionId, senderDevice, requests } = await createCastSession(selectedIds);
+      sessionIdRef.current = sessionId;
+      senderDeviceIdRef.current = senderDevice.id;
+
+      selectedDevices.forEach((device) => {
+        if (!device.pushToken) return;
+        sendNotification(device.pushToken, 'Incoming Beam Cast', 'Someone wants to cast to this device.', {
+          type: 'cast_request',
+          sessionId,
+        }).catch((error) => console.warn('[Notifications] Cast request push failed', error.message));
       });
-      webrtcRef.current = webrtc;
 
-      const offer = await webrtc.createOffer();
-      if (castSessionRef.current !== sessionId) {
-        webrtc.dispose();
-        return;
-      }
+      const channel = subscribeToSessionRequests(sessionId, () => {
+        handleAcceptedRequests();
+      });
 
-      // ═══ SIGNALING — Replace with Supabase Realtime when MCP connected ═══
-      // const signaling = createSignaling();
-      // await signaling.connect('room_' + device.id, 'current_user_id');
-      // signaling.send({ type: 'offer', sdp: offer });
+      setTimeout(() => {
+        channel.unsubscribe();
+      }, 65_000);
 
-      setStatus('Offer created — waiting for receiver');
-
-      // For dev testing without a signaling server, show the offer
-      console.log('[Beam] Offer created. Signaling server needed to complete connection.');
-    } catch (err: any) {
-      if (castSessionRef.current !== sessionId) return;
-      webrtcRef.current?.dispose();
-      webrtcRef.current = null;
-      Alert.alert('Cast Failed', err.message);
-      setIsCasting(false);
-      setTargetDevice(null);
-      setStatus('');
-    } finally {
-      if (castSessionRef.current === sessionId) {
-        setStartingDeviceId(null);
-      }
+      if (requests.length === 0) throw new Error('No cast requests were created.');
+      setTimeout(() => handleAcceptedRequests(), 800);
+      setTimeout(() => {
+        if (phase === 'waiting' && offeredRequestIdsRef.current.size === 0) {
+          Alert.alert('No Response', 'No devices accepted before the request expired.');
+          stopCast();
+        }
+      }, 60_000);
+    } catch (error: any) {
+      Alert.alert('Cast Failed', error.message || 'Could not start cast request.');
+      await stopCast();
     }
   }
 
-  function stopCast() {
-    castSessionRef.current += 1;
-    webrtcRef.current?.dispose();
-    webrtcRef.current = null;
-    setIsCasting(false);
-    setTargetDevice(null);
+  async function handleAcceptedRequests() {
+    const sessionId = sessionIdRef.current;
+    const senderDeviceId = senderDeviceIdRef.current;
+    if (!sessionId || !senderDeviceId) return;
+
+    const requests = await listSessionRequests(sessionId);
+    const accepted = requests.filter((request) => request.status === 'accepted');
+    if (accepted.length === 0) return;
+
+    if (!localStreamRef.current) {
+      setStatus('Open the iOS screen picker to start casting.');
+      const stream = await mediaDevices.getDisplayMedia();
+      localStreamRef.current = stream;
+      setLocalStreamURL(stream.toURL());
+      setPhase('casting');
+    }
+
+    for (const request of accepted) {
+      if (offeredRequestIdsRef.current.has(request.id)) continue;
+      offeredRequestIdsRef.current.add(request.id);
+
+      const webrtc = new WebRTCManager({
+        onStream: () => undefined,
+        onState: (state) => setStatus(state === 'connected' ? 'Streaming' : state),
+        onError: (error) => console.warn('[WebRTC]', error.message),
+        onIceCandidate: (candidate) => {
+          sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
+            type: 'ice',
+            candidate,
+          }).catch((error) => console.warn('[Signal] ICE send failed', error.message));
+        },
+      });
+      peerRefs.current[request.id] = webrtc;
+
+      const offer = await webrtc.createOffer(localStreamRef.current);
+      await sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
+        type: 'offer',
+        sdp: offer,
+      });
+      setStatus(`Streaming to ${offeredRequestIdsRef.current.size} device${offeredRequestIdsRef.current.size === 1 ? '' : 's'}`);
+    }
+  }
+
+  async function stopCast(updateRemote = true) {
+    Object.values(peerRefs.current).forEach((peer) => peer.dispose());
+    peerRefs.current = {};
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    setLocalStreamURL(null);
+
+    if (updateRemote && sessionIdRef.current) {
+      await endCastSession(sessionIdRef.current).catch(() => undefined);
+    }
+
+    sessionIdRef.current = null;
+    senderDeviceIdRef.current = null;
+    offeredRequestIdsRef.current.clear();
+    setPhase('selecting');
     setStatus('');
-    setStartingDeviceId(null);
   }
 
   return (
@@ -143,38 +181,37 @@ export default function CastScreen() {
       <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.header}>
         <Text style={[typography.largeTitle, { color: colors.text }]}>Cast</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
-          {isCasting ? `Streaming to ${targetDevice?.name}` : 'Beam your screen to another device'}
+          {phase === 'selecting' ? 'Select devices to receive your screen' : status}
         </Text>
       </Animated.View>
 
-      {/* Current cast status */}
-      {isCasting && (
-        <Animated.View entering={FadeInDown.duration(180).reduceMotion(ReduceMotion.System)}>
-          <Glass style={styles.castingBanner}>
-            <View style={styles.castingRow}>
-              <AppIcon ios="dot.radiowaves.left.and.right" android="cast" size={20} color={colors.success} />
-              <Text style={[typography.headline, { color: colors.primary }]}>{status}</Text>
+      {phase !== 'selecting' && (
+        <Glass style={styles.statusCard} contentStyle={styles.statusContent}>
+          {localStreamURL ? (
+            <View style={styles.preview}>
+              <RTCView streamURL={localStreamURL} objectFit="contain" style={styles.video} />
             </View>
-            <Text style={[typography.caption1, { color: colors.textSecondary }]}>
-              To {targetDevice?.name}
-            </Text>
-            <BeamButton
-              title="Stop Casting"
-              onPress={stopCast}
-              variant="secondary"
-              icon={<AppIcon ios="stop.fill" android="stop" size={17} color={colors.error} />}
-              iosSystemImage="stop.fill"
-              role="destructive"
-              style={styles.stopButton}
-            />
-          </Glass>
-        </Animated.View>
+          ) : (
+            <ActivityIndicator color={colors.primary} />
+          )}
+          <Text style={[typography.headline, styles.statusText]}>{status}</Text>
+          <Text style={[typography.subhead, styles.mutedText]}>
+            {selectedDevices.map((device) => device.name).join(', ')}
+          </Text>
+          <BeamButton
+            title="Stop Casting"
+            onPress={() => stopCast()}
+            variant="secondary"
+            role="destructive"
+            icon={<AppIcon ios="stop.fill" android="stop" size={17} color={colors.error} />}
+            iosSystemImage="stop.fill"
+            textStyle={{ color: colors.error }}
+            style={styles.stopButton}
+          />
+        </Glass>
       )}
 
-      {/* Available devices */}
-      <Text style={[typography.title2, { color: colors.text, paddingHorizontal: spacing.xxl, marginBottom: spacing.md }]}>
-        Available Devices
-      </Text>
+      <Text style={[typography.title2, styles.sectionTitle]}>Online Devices</Text>
 
       <Animated.ScrollView
         contentContainerStyle={styles.list}
@@ -183,36 +220,52 @@ export default function CastScreen() {
         {loadingDevices ? (
           <View style={styles.messageState}>
             <ActivityIndicator color={colors.primary} />
-            <Text style={[typography.subhead, styles.messageText]}>Loading devices...</Text>
-          </View>
-        ) : loadError ? (
-          <View style={styles.messageState}>
-            <Text style={[typography.body, styles.messageText]}>{loadError}</Text>
-            <BeamButton
-              title="Try Again"
-              onPress={loadDevices}
-              variant="secondary"
-              size="sm"
-              icon={<AppIcon ios="arrow.clockwise" android="refresh" size={17} color={colors.primary} />}
-              iosSystemImage="arrow.clockwise"
-            />
+            <Text style={[typography.subhead, styles.mutedText]}>Loading devices...</Text>
           </View>
         ) : devices.filter((device) => device.online).length === 0 ? (
           <Glass contentStyle={styles.emptyContent}>
             <AppIcon ios="iphone.slash" android="phonelink_off" size={34} color={colors.textTertiary} />
-            <Text style={[typography.headline, styles.messageText]}>No online devices</Text>
-            <Text style={[typography.subhead, styles.messageText]}>Open Beam on another device, then return here.</Text>
+            <Text style={[typography.headline, styles.mutedText]}>No online devices</Text>
+            <Text style={[typography.subhead, styles.mutedText]}>Open Beam on another saved device.</Text>
           </Glass>
-        ) : devices
-          .filter((d) => d.online)
-          .map((device) => (
-            <DeviceCard
+        ) : devices.filter((device) => device.online).map((device) => {
+          const selected = selectedIds.includes(device.id);
+          return (
+            <Pressable
               key={device.id}
-              device={device}
-              onPress={startingDeviceId ? undefined : () => startScreenCast(device)}
-            />
-          ))}
+              onPress={() => toggleDevice(device)}
+              disabled={phase !== 'selecting'}
+              style={[styles.selectableDevice, selected && styles.selectedDevice]}
+            >
+              <View style={styles.deviceSelectRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.headline, { color: colors.text }]}>{device.name}</Text>
+                  <Text style={[typography.caption1, { color: colors.textSecondary }]}>Online</Text>
+                </View>
+                <AppIcon
+                  ios={selected ? 'checkmark.circle.fill' : 'circle'}
+                  android={selected ? 'check_circle' : 'radio_button_unchecked'}
+                  size={24}
+                  color={selected ? colors.primary : colors.textTertiary}
+                />
+              </View>
+            </Pressable>
+          );
+        })}
       </Animated.ScrollView>
+
+      {phase === 'selecting' && (
+        <View style={styles.footer}>
+          <BeamButton
+            title={`Send Cast Request${selectedIds.length ? ` (${selectedIds.length})` : ''}`}
+            onPress={startRequest}
+            disabled={selectedIds.length === 0}
+            icon={<AppIcon ios="airplayvideo" android="cast" size={18} color={colors.textInverse} />}
+            iosSystemImage="airplayvideo"
+            style={styles.fullButton}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -227,31 +280,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingBottom: spacing.lg,
   },
-  castingBanner: {
+  statusCard: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.xl,
-    alignItems: 'center',
   },
-  castingRow: {
-    flexDirection: 'row',
+  statusContent: {
     alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    gap: spacing.md,
   },
-  stopButton: {
-    marginTop: spacing.md,
-    minWidth: 160,
+  preview: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.bgSecondary,
+  },
+  video: {
+    flex: 1,
+  },
+  statusText: {
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    color: colors.text,
+    paddingHorizontal: spacing.xxl,
+    marginBottom: spacing.md,
   },
   list: {
     paddingHorizontal: spacing.xxl,
-    paddingBottom: 120,
+    paddingBottom: 180,
   },
   messageState: {
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.xxxl,
   },
-  messageText: {
+  mutedText: {
     color: colors.textSecondary,
     textAlign: 'center',
   },
@@ -259,5 +324,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     padding: spacing.xxl,
+  },
+  selectableDevice: {
+    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.glassBg,
+    borderWidth: 1,
+    borderColor: colors.separator,
+    padding: spacing.lg,
+  },
+  selectedDevice: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  deviceSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  footer: {
+    position: 'absolute',
+    left: spacing.xxl,
+    right: spacing.xxl,
+    bottom: 110,
+  },
+  fullButton: {
+    width: '100%',
+  },
+  stopButton: {
+    minWidth: 160,
   },
 });

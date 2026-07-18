@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { colors, typography } from '../lib/theme';
-import { getStoredUser } from '../lib/store';
+import { storeUser } from '../lib/store';
+import { getCurrentProfile, registerCurrentDevice } from '../lib/beam';
 
 export default function SplashScreen() {
   useEffect(() => {
@@ -10,7 +11,11 @@ export default function SplashScreen() {
   }, []);
 
   async function checkAuth() {
-    const user = await getStoredUser();
+    const user = await getCurrentProfile().catch(() => null);
+    if (user) {
+      await storeUser(user);
+      await registerCurrentDevice().catch(() => undefined);
+    }
     // Delay to show splash briefly
     setTimeout(() => {
       if (user) {

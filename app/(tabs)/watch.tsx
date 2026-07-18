@@ -1,86 +1,132 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, Platform, AppState } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MediaStream, RTCView } from 'react-native-webrtc';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { AppIcon } from '../../components/AppIcon';
-import { RoomCodeField } from '../../components/RoomCodeField';
 import { colors, typography, spacing, radius } from '../../lib/theme';
-
-// ═══ PiP: RTCPIPView renders the stream and supports PiP natively ═══
-// Both the big-screen view and the PiP floating window render simultaneously.
-// When the user backgrounds the app, startAutomatically kicks in.
-import { RTCPIPView, startIOSPIP, stopIOSPIP } from 'react-native-webrtc';
+import { WebRTCManager } from '../../lib/webrtc';
+import {
+  BeamCastRequest,
+  listIncomingCastRequests,
+  registerCurrentDevice,
+  respondToCastRequest,
+  sendSignal,
+  subscribeToCastRequests,
+  subscribeToSignals,
+} from '../../lib/beam';
 
 export default function WatchScreen() {
-  const [roomCode, setRoomCode] = useState('');
-  const [isWatching, setIsWatching] = useState(false);
+  const [requests, setRequests] = useState<BeamCastRequest[]>([]);
+  const [currentRequest, setCurrentRequest] = useState<BeamCastRequest | null>(null);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [status, setStatus] = useState('');
-  const [streamURL, setStreamURL] = useState<string | undefined>(undefined);
-  const [pipActive, setPipActive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [muted, setMuted] = useState(false);
+  const webrtcRef = useRef<WebRTCManager | null>(null);
 
-  const videoRef = useRef<any>(null);
+  const loadRequests = useCallback(async () => {
+    try {
+      const device = await registerCurrentDevice();
+      setCurrentDeviceId(device.id);
+      setRequests(await listIncomingCastRequests());
+    } catch (error: any) {
+      Alert.alert('Watch Error', error.message || 'Could not load cast requests.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // ─── Auto-handoff: PiP activates when app backgrounds, stops on return ───
   useEffect(() => {
-    if (!isWatching) return;
+    let channel: { unsubscribe: () => void } | null = null;
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' && videoRef.current) {
-        // App went to background — PiP starts automatically via iosPIP opts,
-        // but we also manually flag it so the UI button reflects state
-        setPipActive(true);
-      } else if (nextState === 'active') {
-        // App returned to foreground
-        // stopAutomatically handles this on native side, but sync our state
-        setPipActive(false);
-      }
+    async function setup() {
+      const device = await registerCurrentDevice();
+      setCurrentDeviceId(device.id);
+      channel = subscribeToCastRequests(device.id, () => {
+        loadRequests();
+      });
+      await loadRequests();
+    }
+
+    setup().catch((error) => {
+      setLoading(false);
+      Alert.alert('Watch Error', error.message || 'Could not start receiver.');
     });
 
-    return () => subscription.remove();
-  }, [isWatching]);
+    return () => {
+      channel?.unsubscribe();
+      webrtcRef.current?.dispose();
+    };
+  }, [loadRequests]);
 
-  async function joinRoom() {
-    if (!roomCode.trim()) {
-      Alert.alert('Error', 'Enter a room code');
-      return;
-    }
+  async function acceptRequest(request: BeamCastRequest) {
+    if (!currentDeviceId) return;
 
-    setStatus('Joining room...');
-    setIsWatching(true);
+    setCurrentRequest(request);
+    setStatus('Accepted. Waiting for sender to start screen sharing...');
+    await respondToCastRequest(request.id, 'accepted');
 
-    try {
-      // ═══ Replace with real room join via Supabase Realtime ═══
-      // const signaling = createSignaling();
-      // await signaling.connect(roomCode, 'receiver_user_id');
-      await new Promise((r) => setTimeout(r, 1500));
-      setStatus('Connected');
-      // ═══ When ontrack fires, set streamURL: setStreamURL(stream.toURL()) ═══
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-      setIsWatching(false);
-      setStatus('');
-    }
+    const webrtc = new WebRTCManager({
+      onStream: (incomingStream) => {
+        setStream(incomingStream);
+        setStatus('Receiving cast');
+      },
+      onState: (state) => setStatus(state === 'connected' ? 'Receiving cast' : state),
+      onError: (error) => console.warn('[WebRTC]', error.message),
+      onIceCandidate: (candidate) => {
+        if (!currentDeviceId || !request.senderDeviceId) return;
+        sendSignal(request.sessionId, request.id, currentDeviceId, request.senderDeviceId, {
+          type: 'ice',
+          candidate,
+        }).catch((error) => console.warn('[Signal] ICE send failed', error.message));
+      },
+    });
+    webrtcRef.current = webrtc;
+
+    subscribeToSignals(request.sessionId, currentDeviceId, async (msg, row) => {
+      try {
+        if (msg.type === 'offer') {
+          const answer = await webrtc.handleOffer(msg.sdp);
+          await sendSignal(request.sessionId, request.id, currentDeviceId, row.sender_device_id, {
+            type: 'answer',
+            sdp: answer,
+          });
+        } else if (msg.type === 'ice') {
+          await webrtc.handleIceCandidate(msg.candidate);
+        } else if (msg.type === 'leave') {
+          leaveCast();
+        }
+      } catch (error: any) {
+        Alert.alert('Receiver Error', error.message || 'Could not handle cast signal.');
+      }
+    });
   }
 
-  function leaveRoom() {
-    setIsWatching(false);
-    setRoomCode('');
+  async function declineRequest(request: BeamCastRequest) {
+    await respondToCastRequest(request.id, 'declined');
+    setRequests((current) => current.filter((item) => item.id !== request.id));
+  }
+
+  function toggleMute() {
+    const nextMuted = !muted;
+    stream?.getAudioTracks().forEach((track) => {
+      track.enabled = !nextMuted;
+    });
+    setMuted(nextMuted);
+  }
+
+  function leaveCast() {
+    webrtcRef.current?.dispose();
+    webrtcRef.current = null;
+    setStream(null);
+    setCurrentRequest(null);
     setStatus('');
-    setStreamURL(undefined);
-    setPipActive(false);
-  }
-
-  function togglePip() {
-    if (!videoRef.current) return;
-    if (pipActive) {
-      stopIOSPIP(videoRef);
-      setPipActive(false);
-    } else {
-      startIOSPIP(videoRef);
-      setPipActive(true);
-    }
+    setMuted(false);
+    loadRequests();
   }
 
   return (
@@ -88,93 +134,90 @@ export default function WatchScreen() {
       <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.header}>
         <Text style={[typography.largeTitle, { color: colors.text }]}>Watch</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
-          Receive a cast or join a watch party
+          {currentRequest ? status : 'Accept incoming casts from saved devices'}
         </Text>
       </Animated.View>
 
-      {!isWatching ? (
-        <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
-          <Glass style={styles.joinCard} contentStyle={styles.joinCardContent}>
-            <Text style={[typography.title2, styles.centerText]}>Join a Room</Text>
-            <Text style={[typography.subhead, styles.joinDescription]}>
-              Enter the 6-character code shared by the sender.
-            </Text>
-
-            <RoomCodeField
-              value={roomCode}
-              onChangeText={setRoomCode}
-              onSubmit={joinRoom}
-            />
-
-            <BeamButton
-              title="Join Room"
-              onPress={joinRoom}
-              icon={<AppIcon ios="play.circle.fill" android="play_circle" size={19} color={colors.textInverse} />}
-              iosSystemImage="play.circle.fill"
-              style={styles.joinButton}
-            />
-          </Glass>
-
-          <Text style={[typography.footnote, styles.watchHint]}>
-            Or wait for someone to cast to your device directly from their Cast tab.
-          </Text>
-        </Animated.View>
-      ) : (
+      {currentRequest ? (
         <Animated.View entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)} style={styles.content}>
           <Glass style={styles.receivingCard} contentStyle={styles.receivingCardContent}>
-            {/* ─── Video Stream via RTCPIPView ─────────────────────────── */}
-            {streamURL ? (
+            {stream ? (
               <View style={styles.videoContainer}>
-                <RTCPIPView
-                  ref={videoRef}
-                  streamURL={streamURL}
-                  objectFit="contain"
-                  zOrder={0}
-                  style={styles.video}
-                  iosPIP={{
-                    enabled: true,
-                    startAutomatically: true,
-                    stopAutomatically: true,
-                  }}
-                />
+                <RTCView streamURL={stream.toURL()} objectFit="contain" style={styles.video} />
               </View>
             ) : (
-              <>
-                <AppIcon ios="tv" android="tv" size={52} color={colors.primary} weight="medium" />
-                <Text style={[typography.title2, { color: colors.text, textAlign: 'center', marginTop: spacing.lg }]}>
-                  {status}
-                </Text>
-              </>
+              <View style={styles.waitingState}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[typography.headline, styles.centerText]}>{status}</Text>
+              </View>
             )}
 
-            <Text style={[typography.subhead, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}>
-              Room: {roomCode}
-            </Text>
-
-            {/* ─── PiP Toggle (visible when stream is active & iOS) ──── */}
-            {streamURL && Platform.OS === 'ios' && (
+            <View style={styles.receiverActions}>
               <BeamButton
-                title={pipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
-                onPress={togglePip}
+                title={muted ? 'Unmute Audio' : 'Mute Audio'}
+                onPress={toggleMute}
                 variant="secondary"
-                icon={<AppIcon ios="pip" android="picture_in_picture_alt" size={18} color={colors.primary} />}
-                iosSystemImage="pip"
-                style={styles.pipButton}
+                disabled={!stream}
+                icon={<AppIcon ios={muted ? 'speaker.wave.2' : 'speaker.slash'} android={muted ? 'volume_up' : 'volume_off'} size={18} color={colors.primary} />}
+                iosSystemImage={muted ? 'speaker.wave.2' : 'speaker.slash'}
+                style={styles.actionButton}
               />
-            )}
-
-            <BeamButton
-              title="Disconnect"
-              onPress={leaveRoom}
-              variant="secondary"
-              icon={<AppIcon ios="xmark.circle" android="cancel" size={18} color={colors.error} />}
-              iosSystemImage="xmark.circle"
-              role="destructive"
-              textStyle={{ color: colors.error }}
-              style={styles.leaveButton}
-            />
+              <BeamButton
+                title="Disconnect"
+                onPress={leaveCast}
+                variant="secondary"
+                role="destructive"
+                icon={<AppIcon ios="xmark.circle" android="cancel" size={18} color={colors.error} />}
+                iosSystemImage="xmark.circle"
+                textStyle={{ color: colors.error }}
+                style={styles.actionButton}
+              />
+            </View>
           </Glass>
         </Animated.View>
+      ) : (
+        <Animated.ScrollView
+          entering={FadeInDown.duration(220).reduceMotion(ReduceMotion.System)}
+          contentContainerStyle={styles.list}
+        >
+          {loading ? (
+            <View style={styles.waitingState}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={[typography.subhead, styles.mutedText]}>Checking for cast requests...</Text>
+            </View>
+          ) : requests.length === 0 ? (
+            <Glass contentStyle={styles.emptyContent}>
+              <AppIcon ios="tv" android="tv" size={42} color={colors.primary} />
+              <Text style={[typography.title2, styles.centerText]}>Ready to Watch</Text>
+              <Text style={[typography.subhead, styles.mutedText]}>
+                Incoming cast requests will appear here and as a push notification when Beam is backgrounded.
+              </Text>
+            </Glass>
+          ) : requests.map((request) => (
+            <Glass key={request.id} style={styles.requestCard} contentStyle={styles.requestContent}>
+              <Text style={[typography.headline, { color: colors.text }]}>Incoming Cast</Text>
+              <Text style={[typography.subhead, styles.mutedText]}>
+                This request expires in about 1 minute if ignored.
+              </Text>
+              <View style={styles.requestActions}>
+                <BeamButton
+                  title="Decline"
+                  onPress={() => declineRequest(request)}
+                  variant="secondary"
+                  role="cancel"
+                  style={styles.actionButton}
+                />
+                <BeamButton
+                  title="Accept"
+                  onPress={() => acceptRequest(request)}
+                  icon={<AppIcon ios="checkmark.circle.fill" android="check_circle" size={18} color={colors.textInverse} />}
+                  iosSystemImage="checkmark.circle.fill"
+                  style={styles.actionButton}
+                />
+              </View>
+            </Glass>
+          ))}
+        </Animated.ScrollView>
       )}
     </SafeAreaView>
   );
@@ -196,38 +239,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingBottom: 72,
   },
-  joinCard: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-  },
-  joinCardContent: {
+  list: {
     paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.xxxl,
-    alignItems: 'center',
-    width: '100%',
-  },
-  centerText: {
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  joinDescription: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  joinButton: {
-    width: '100%',
-    marginTop: spacing.lg,
-  },
-  watchHint: {
-    color: colors.textTertiary,
-    textAlign: 'center',
-    maxWidth: 360,
-    alignSelf: 'center',
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    paddingBottom: 120,
   },
   receivingCard: {
     width: '100%',
@@ -239,14 +253,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
-  leaveButton: {
-    marginTop: spacing.lg,
-    minWidth: 160,
-  },
-  pipButton: {
-    marginTop: spacing.md,
-    minWidth: 200,
-  },
   videoContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -256,6 +262,43 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   video: {
+    flex: 1,
+  },
+  waitingState: {
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xxxl,
+  },
+  centerText: {
+    color: colors.text,
+    textAlign: 'center',
+  },
+  mutedText: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  emptyContent: {
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.xxl,
+  },
+  requestCard: {
+    marginBottom: spacing.md,
+  },
+  requestContent: {
+    gap: spacing.md,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  receiverActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  actionButton: {
     flex: 1,
   },
 });

@@ -16,7 +16,8 @@ import { BeamButton } from '../../components/BeamButton';
 import { AppIcon } from '../../components/AppIcon';
 import { AppTextField } from '../../components/AppTextField';
 import { colors, typography, spacing } from '../../lib/theme';
-import { storeUser, storeAuthToken } from '../../lib/store';
+import { storeUser } from '../../lib/store';
+import { getCurrentProfile, registerCurrentDevice, signInWithEmail } from '../../lib/beam';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -31,17 +32,10 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // TODO: Replace this mock flow with Supabase authentication.
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const mockUser = {
-        id: `user_${Date.now()}`,
-        email,
-        displayName: email.split('@')[0],
-        domain: `@${email.split('@')[0]}`,
-      };
-
-      await storeUser(mockUser);
-      await storeAuthToken(`mock_token_${Date.now()}`);
+      await signInWithEmail(email.trim(), password);
+      const profile = await getCurrentProfile();
+      if (profile) await storeUser(profile);
+      await registerCurrentDevice();
       router.replace('/(tabs)/devices');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Login failed');

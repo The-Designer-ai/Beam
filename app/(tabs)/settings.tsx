@@ -8,7 +8,7 @@ import { BeamButton } from '../../components/BeamButton';
 import { PaywallModal } from '../../components/PaywallModal';
 import { AppIcon } from '../../components/AppIcon';
 import { colors, typography, spacing, radius } from '../../lib/theme';
-import { getStoredUser, clearUser, getSubscription, storeSubscription } from '../../lib/store';
+import { getStoredUser, clearUser, getSubscription } from '../../lib/store';
 import { User, SubscriptionTier } from '../../types';
 import {
   initRevenueCat,
@@ -21,6 +21,7 @@ import {
   unregisterPushNotifications,
   arePushNotificationsEnabled,
 } from '../../lib/notifications';
+import { signOut } from '../../lib/beam';
 
 export default function SettingsScreen() {
   const [user, setUser] = useState<User | null>(null);
@@ -91,6 +92,9 @@ export default function SettingsScreen() {
         onPress: async () => {
           try {
             await logOutRevenueCat();
+          } catch {}
+          try {
+            await signOut();
           } catch {}
           await clearUser();
           router.replace('/(auth)/login');

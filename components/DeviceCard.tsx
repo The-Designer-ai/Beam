@@ -11,12 +11,18 @@ interface DeviceCardProps {
 }
 
 export function DeviceCard({ device, onPress }: DeviceCardProps) {
+  const typeLabel = device.type === 'ios' ? 'iPhone/iPad' : device.type === 'android' ? 'Android' : 'Web';
+  const displayName = device.ownerName
+    ? `${device.ownerName}${device.ownerName.endsWith('s') ? '\'' : '\'s'} ${device.name}`
+    : device.name;
+  const detail = device.ownerDomain ? `${device.ownerDomain} - ${typeLabel}` : typeLabel;
+
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={`${device.name}, ${device.online ? 'online' : 'offline'}`}
+      accessibilityLabel={`${displayName}, ${device.online ? 'online' : 'offline'}`}
       accessibilityHint={onPress ? 'Selects this device for casting' : undefined}
       style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
     >
@@ -32,15 +38,13 @@ export function DeviceCard({ device, onPress }: DeviceCardProps) {
               />
               <View style={[styles.dot, { backgroundColor: device.online ? colors.online : colors.offline }]} />
             </View>
-            <Text style={[typography.headline, styles.deviceName]} numberOfLines={1}>{device.name}</Text>
+            <Text style={[typography.headline, styles.deviceName]} numberOfLines={1}>{displayName}</Text>
           </View>
           <Text style={[styles.badge, { color: device.online ? colors.online : colors.offline }]}>
             {device.online ? 'Online' : 'Offline'}
           </Text>
         </View>
-        <Text style={typography.caption1}>
-          {device.type === 'ios' ? 'iPhone/iPad' : device.type === 'android' ? 'Android' : 'Web'}
-        </Text>
+        <Text style={[typography.caption1, styles.detail]} numberOfLines={1}>{detail}</Text>
       </Glass>
     </Pressable>
   );
@@ -82,6 +86,9 @@ const styles = StyleSheet.create({
   deviceName: {
     flex: 1,
     color: colors.text,
+  },
+  detail: {
+    color: colors.textSecondary,
   },
   dot: {
     position: 'absolute',

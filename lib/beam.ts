@@ -1,4 +1,5 @@
 import * as ExpoDevice from 'expo-device';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
@@ -26,6 +27,8 @@ type DbDevice = {
   online: boolean;
   last_seen: string;
   push_token?: string | null;
+  owner_display_name?: string | null;
+  owner_domain?: string | null;
 };
 
 function toDevice(row: DbDevice): Device {
@@ -36,6 +39,8 @@ function toDevice(row: DbDevice): Device {
     online: row.online,
     lastSeen: new Date(row.last_seen).getTime(),
     ownerId: row.owner_id,
+    ownerName: row.owner_display_name ?? undefined,
+    ownerDomain: row.owner_domain ?? undefined,
     pushToken: row.push_token ?? undefined,
   };
 }
@@ -68,17 +73,49 @@ export async function signUpWithEmail(email: string, password: string, displayNa
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName } },
+    options: {
+      data: { display_name: displayName },
+      emailRedirectTo: Linking.createURL('/callback'),
+    },
   });
   if (error) throw error;
   if (!data.user) throw new Error('No user returned from Supabase.');
-  await upsertProfile({
-    id: data.user.id,
-    email: data.user.email || email,
-    displayName,
-    domain: makeDomain(email, displayName),
-  });
-  return data.user;
+  if (data.session) {
+    await upsertProfile({
+      id: data.user.id,
+      email: data.user.email || email,
+      displayName,
+      domain: makeDomain(email, displayName),
+    });
+  }
+  return { user: data.user, requiresEmailConfirmation: !data.session };
+}
+
+export async function completeEmailConfirmation(url: string) {
+  const parsed = Linking.parse(url);
+  const code = typeof parsed.queryParams?.code === 'string' ? parsed.queryParams.code : null;
+
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+  } else {
+    const accessToken = typeof parsed.queryParams?.access_token === 'string'
+      ? parsed.queryParams.access_token
+      : null;
+    const refreshToken = typeof parsed.queryParams?.refresh_token === 'string'
+      ? parsed.queryParams.refresh_token
+      : null;
+    if (!accessToken || !refreshToken) throw new Error('Confirmation link is invalid or expired.');
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw error;
+  }
+
+  const profile = await getCurrentProfile();
+  if (!profile) throw new Error('Could not load your Beam profile.');
+  return profile;
 }
 
 export async function signOut() {
@@ -190,20 +227,24 @@ export async function markCurrentDeviceOffline() {
 }
 
 export async function listSavedDevices(): Promise<Device[]> {
-  const user = await getSessionUser();
-  if (!user) return [];
-  const currentDeviceName = ExpoDevice.deviceName || ExpoDevice.modelName;
+  const currentDevice = await registerCurrentDevice();
 
-  const { data, error } = await supabase
-    .from('devices')
-    .select('id,owner_id,name,type,online,last_seen,push_token')
-    .order('online', { ascending: false })
-    .order('last_seen', { ascending: false });
+  const { data, error } = await supabase.rpc('list_saved_devices', {
+    p_current_device_id: currentDevice.id,
+  });
   if (error) throw error;
 
-  return (data || [])
-    .map(toDevice)
-    .filter((device) => device.name !== currentDeviceName);
+  return (data || []).map((row: any) => toDevice({
+    id: row.device_id,
+    owner_id: row.device_owner_id,
+    name: row.device_name,
+    type: row.device_type,
+    push_token: row.device_push_token,
+    online: row.device_online,
+    last_seen: row.device_last_seen,
+    owner_display_name: row.owner_display_name,
+    owner_domain: row.owner_domain,
+  }));
 }
 
 export async function createCurrentDeviceInvite() {

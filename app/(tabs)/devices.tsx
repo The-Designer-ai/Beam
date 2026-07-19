@@ -13,7 +13,6 @@ import {
   createCurrentDeviceInvite,
   listSavedDevices,
   redeemDeviceInvite,
-  registerCurrentDevice,
 } from '../../lib/beam';
 
 export default function DevicesScreen() {
@@ -27,7 +26,6 @@ export default function DevicesScreen() {
   const loadDevices = useCallback(async () => {
     setRefreshing(true);
     try {
-      await registerCurrentDevice();
       setDevices(await listSavedDevices());
     } catch (error: any) {
       Alert.alert('Devices Error', error.message || 'Could not load devices.');

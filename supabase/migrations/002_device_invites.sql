@@ -124,7 +124,7 @@ begin
     v_invite.created_by,
     now()
   )
-  on conflict (device_id, grantee_user_id) do update
+  on conflict on constraint device_access_device_id_grantee_user_id_key do update
   set status = 'approved',
       created_by = excluded.created_by,
       updated_at = now();

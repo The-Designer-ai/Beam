@@ -5,6 +5,8 @@ export interface Device {
   online: boolean;
   lastSeen: number;
   ownerId?: string;
+  ownerName?: string;
+  ownerDomain?: string;
   pushToken?: string;
 }
 

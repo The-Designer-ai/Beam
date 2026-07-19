@@ -33,7 +33,15 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await signUpWithEmail(email.trim(), password, name.trim());
+      const result = await signUpWithEmail(email.trim(), password, name.trim());
+      if (result.requiresEmailConfirmation) {
+        Alert.alert(
+          'Check Your Email',
+          'Open the confirmation link on this device to finish creating your Beam account.',
+          [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }],
+        );
+        return;
+      }
       const profile = await getCurrentProfile();
       if (profile) await storeUser(profile);
       await registerCurrentDevice();

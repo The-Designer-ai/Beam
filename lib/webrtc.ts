@@ -38,6 +38,8 @@ export interface PeerConnectionCallbacks {
 export class WebRTCManager {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
+  private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private remoteDescriptionSet = false;
   private callbacks: PeerConnectionCallbacks;
   private disposed = false;
 
@@ -78,6 +80,8 @@ export class WebRTCManager {
   async handleOffer(offer: WebRTCSessionDescriptionInit): Promise<WebRTCSessionDescriptionInit> {
     this.pc = this.createPeerConnection();
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
+    this.remoteDescriptionSet = true;
+    await this.flushPendingIceCandidates();
 
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
@@ -89,12 +93,18 @@ export class WebRTCManager {
   async handleAnswer(answer: WebRTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) throw new Error('No peer connection');
     await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
+    this.remoteDescriptionSet = true;
+    await this.flushPendingIceCandidates();
   }
 
   // ─── Handle ICE candidate ──────────────────────────────────────
 
   async handleIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    if (!this.pc) return;
+    if (this.disposed) return;
+    if (!this.pc || !this.remoteDescriptionSet) {
+      this.pendingIceCandidates.push(candidate);
+      return;
+    }
     await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
   }
 
@@ -110,6 +120,8 @@ export class WebRTCManager {
     this.disposed = true;
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.localStream = null;
+    this.pendingIceCandidates = [];
+    this.remoteDescriptionSet = false;
     this.pc?.close();
     this.pc = null;
   }
@@ -140,5 +152,15 @@ export class WebRTCManager {
     });
 
     return pc;
+  }
+
+  private async flushPendingIceCandidates(): Promise<void> {
+    if (!this.pc || !this.remoteDescriptionSet) return;
+
+    const candidates = this.pendingIceCandidates;
+    this.pendingIceCandidates = [];
+    for (const candidate of candidates) {
+      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
   }
 }

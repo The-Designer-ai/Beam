@@ -416,12 +416,12 @@ export async function sendSignal(
   if (error) throw error;
 }
 
-export function subscribeToSignals(
+export async function subscribeToSignals(
   sessionId: string,
   targetDeviceId: string,
   onSignal: (msg: SignalMessage, row: any) => void,
-): RealtimeChannel {
-  return supabase
+): Promise<RealtimeChannel> {
+  const channel = supabase
     .channel(`beam:signals:${sessionId}:${targetDeviceId}`)
     .on(
       'postgres_changes',
@@ -430,6 +430,29 @@ export function subscribeToSignals(
         const row = payload.new as any;
         if (row.session_id === sessionId) onSignal(row.payload as SignalMessage, row);
       },
-    )
-    .subscribe();
+    );
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      channel.unsubscribe();
+      reject(new Error('Timed out while connecting to cast signaling.'));
+    }, 10_000);
+
+    channel.subscribe((status) => {
+      if (settled) return;
+      if (status === 'SUBSCRIBED') {
+        settled = true;
+        clearTimeout(timeout);
+        resolve(channel);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        settled = true;
+        clearTimeout(timeout);
+        channel.unsubscribe();
+        reject(new Error('Could not connect to cast signaling.'));
+      }
+    });
+  });
 }

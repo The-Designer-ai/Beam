@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { mediaDevices, MediaStream, RTCView } from 'react-native-webrtc';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { AppIcon } from '../../components/AppIcon';
@@ -16,6 +17,7 @@ import {
   listSavedDevices,
   listSessionRequests,
   sendSignal,
+  subscribeToSignals,
   subscribeToSessionRequests,
 } from '../../lib/beam';
 import { sendNotification } from '../../lib/notifications';
@@ -35,6 +37,8 @@ export default function CastScreen() {
   const peerRefs = useRef<Record<string, WebRTCManager>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
   const offeredRequestIdsRef = useRef<Set<string>>(new Set());
+  const connectedRequestIdsRef = useRef<Set<string>>(new Set());
+  const signalChannelRef = useRef<RealtimeChannel | null>(null);
 
   const selectedDevices = useMemo(
     () => devices.filter((device) => selectedIds.includes(device.id)),
@@ -79,11 +83,33 @@ export default function CastScreen() {
     setPhase('waiting');
     setStatus('Waiting for selected devices to accept...');
     offeredRequestIdsRef.current.clear();
+    connectedRequestIdsRef.current.clear();
 
     try {
       const { sessionId, senderDevice, requests } = await createCastSession(selectedIds);
       sessionIdRef.current = sessionId;
       senderDeviceIdRef.current = senderDevice.id;
+
+      signalChannelRef.current = await subscribeToSignals(
+        sessionId,
+        senderDevice.id,
+        async (msg, row) => {
+          const requestId = row.request_id as string;
+          const peer = peerRefs.current[requestId];
+          if (!peer) return;
+
+          try {
+            if (msg.type === 'answer') {
+              await peer.handleAnswer(msg.sdp);
+            } else if (msg.type === 'ice') {
+              await peer.handleIceCandidate(msg.candidate);
+            }
+          } catch (error: any) {
+            console.warn('[Signal] Sender could not handle signal', error.message);
+            setStatus('Connection failed');
+          }
+        },
+      );
 
       selectedDevices.forEach((device) => {
         if (!device.pushToken) return;
@@ -138,7 +164,18 @@ export default function CastScreen() {
 
       const webrtc = new WebRTCManager({
         onStream: () => undefined,
-        onState: (state) => setStatus(state === 'connected' ? 'Streaming' : state),
+        onState: (state) => {
+          if (state === 'connected') {
+            connectedRequestIdsRef.current.add(request.id);
+            const count = connectedRequestIdsRef.current.size;
+            setStatus(`Streaming to ${count} device${count === 1 ? '' : 's'}`);
+          } else if (state === 'failed' || state === 'disconnected') {
+            connectedRequestIdsRef.current.delete(request.id);
+            setStatus('Connection failed');
+          } else {
+            setStatus('Connecting...');
+          }
+        },
         onError: (error) => console.warn('[WebRTC]', error.message),
         onIceCandidate: (candidate) => {
           sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
@@ -154,7 +191,7 @@ export default function CastScreen() {
         type: 'offer',
         sdp: offer,
       });
-      setStatus(`Streaming to ${offeredRequestIdsRef.current.size} device${offeredRequestIdsRef.current.size === 1 ? '' : 's'}`);
+      setStatus('Connecting...');
     }
   }
 
@@ -164,6 +201,8 @@ export default function CastScreen() {
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
     setLocalStreamURL(null);
+    signalChannelRef.current?.unsubscribe();
+    signalChannelRef.current = null;
 
     if (updateRemote && sessionIdRef.current) {
       await endCastSession(sessionIdRef.current).catch(() => undefined);
@@ -172,6 +211,7 @@ export default function CastScreen() {
     sessionIdRef.current = null;
     senderDeviceIdRef.current = null;
     offeredRequestIdsRef.current.clear();
+    connectedRequestIdsRef.current.clear();
     setPhase('selecting');
     setStatus('');
   }

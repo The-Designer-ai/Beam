@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { Glass } from '../../components/Glass';
 import { BeamButton } from '../../components/BeamButton';
 import { AppIcon } from '../../components/AppIcon';
@@ -27,6 +28,7 @@ export default function WatchScreen() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [muted, setMuted] = useState(false);
   const webrtcRef = useRef<WebRTCManager | null>(null);
+  const signalChannelRef = useRef<RealtimeChannel | null>(null);
 
   const loadRequests = useCallback(async () => {
     try {
@@ -59,6 +61,7 @@ export default function WatchScreen() {
 
     return () => {
       channel?.unsubscribe();
+      signalChannelRef.current?.unsubscribe();
       webrtcRef.current?.dispose();
     };
   }, [loadRequests]);
@@ -66,44 +69,57 @@ export default function WatchScreen() {
   async function acceptRequest(request: BeamCastRequest) {
     if (!currentDeviceId) return;
 
-    setCurrentRequest(request);
-    setStatus('Accepted. Waiting for sender to start screen sharing...');
-    await respondToCastRequest(request.id, 'accepted');
+    try {
+      setCurrentRequest(request);
+      setStatus('Preparing receiver...');
 
-    const webrtc = new WebRTCManager({
-      onStream: (incomingStream) => {
-        setStream(incomingStream);
-        setStatus('Receiving cast');
-      },
-      onState: (state) => setStatus(state === 'connected' ? 'Receiving cast' : state),
-      onError: (error) => console.warn('[WebRTC]', error.message),
-      onIceCandidate: (candidate) => {
-        if (!currentDeviceId || !request.senderDeviceId) return;
-        sendSignal(request.sessionId, request.id, currentDeviceId, request.senderDeviceId, {
-          type: 'ice',
-          candidate,
-        }).catch((error) => console.warn('[Signal] ICE send failed', error.message));
-      },
-    });
-    webrtcRef.current = webrtc;
+      const webrtc = new WebRTCManager({
+        onStream: (incomingStream) => {
+          setStream(incomingStream);
+          setStatus('Receiving cast');
+        },
+        onState: (state) => setStatus(state === 'connected' ? 'Receiving cast' : state),
+        onError: (error) => console.warn('[WebRTC]', error.message),
+        onIceCandidate: (candidate) => {
+          if (!currentDeviceId || !request.senderDeviceId) return;
+          sendSignal(request.sessionId, request.id, currentDeviceId, request.senderDeviceId, {
+            type: 'ice',
+            candidate,
+          }).catch((error) => console.warn('[Signal] ICE send failed', error.message));
+        },
+      });
+      webrtcRef.current = webrtc;
 
-    subscribeToSignals(request.sessionId, currentDeviceId, async (msg, row) => {
-      try {
-        if (msg.type === 'offer') {
-          const answer = await webrtc.handleOffer(msg.sdp);
-          await sendSignal(request.sessionId, request.id, currentDeviceId, row.sender_device_id, {
-            type: 'answer',
-            sdp: answer,
-          });
-        } else if (msg.type === 'ice') {
-          await webrtc.handleIceCandidate(msg.candidate);
-        } else if (msg.type === 'leave') {
-          leaveCast();
+      signalChannelRef.current?.unsubscribe();
+      signalChannelRef.current = await subscribeToSignals(request.sessionId, currentDeviceId, async (msg, row) => {
+        try {
+          if (msg.type === 'offer') {
+            const answer = await webrtc.handleOffer(msg.sdp);
+            await sendSignal(request.sessionId, request.id, currentDeviceId, row.sender_device_id, {
+              type: 'answer',
+              sdp: answer,
+            });
+          } else if (msg.type === 'ice') {
+            await webrtc.handleIceCandidate(msg.candidate);
+          } else if (msg.type === 'leave') {
+            leaveCast();
+          }
+        } catch (error: any) {
+          Alert.alert('Receiver Error', error.message || 'Could not handle cast signal.');
         }
-      } catch (error: any) {
-        Alert.alert('Receiver Error', error.message || 'Could not handle cast signal.');
-      }
-    });
+      });
+
+      await respondToCastRequest(request.id, 'accepted');
+      setStatus('Accepted. Waiting for sender to start screen sharing...');
+    } catch (error: any) {
+      signalChannelRef.current?.unsubscribe();
+      signalChannelRef.current = null;
+      webrtcRef.current?.dispose();
+      webrtcRef.current = null;
+      setCurrentRequest(null);
+      setStatus('');
+      Alert.alert('Receiver Error', error.message || 'Could not prepare this device for casting.');
+    }
   }
 
   async function declineRequest(request: BeamCastRequest) {
@@ -122,6 +138,8 @@ export default function WatchScreen() {
   function leaveCast() {
     webrtcRef.current?.dispose();
     webrtcRef.current = null;
+    signalChannelRef.current?.unsubscribe();
+    signalChannelRef.current = null;
     setStream(null);
     setCurrentRequest(null);
     setStatus('');

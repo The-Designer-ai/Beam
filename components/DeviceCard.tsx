@@ -4,6 +4,7 @@ import { Glass } from './Glass';
 import { AppIcon } from './AppIcon';
 import { colors, typography, radius, spacing } from '../lib/theme';
 import { Device } from '../types';
+import { getDeviceDisplayName } from '../lib/deviceName';
 
 interface DeviceCardProps {
   device: Device;
@@ -12,9 +13,7 @@ interface DeviceCardProps {
 
 export function DeviceCard({ device, onPress }: DeviceCardProps) {
   const typeLabel = device.type === 'ios' ? 'iPhone/iPad' : device.type === 'android' ? 'Android' : 'Web';
-  const displayName = device.ownerName
-    ? `${device.ownerName}${device.ownerName.endsWith('s') ? '\'' : '\'s'} ${device.name}`
-    : device.name;
+  const displayName = getDeviceDisplayName(device);
   const detail = device.ownerDomain ? `${device.ownerDomain} - ${typeLabel}` : typeLabel;
 
   return (

@@ -239,7 +239,6 @@ export async function listSavedDevices(): Promise<Device[]> {
     owner_id: row.device_owner_id,
     name: row.device_name,
     type: row.device_type,
-    push_token: row.device_push_token,
     online: row.device_online,
     last_seen: row.device_last_seen,
     owner_display_name: row.owner_display_name,
@@ -414,6 +413,30 @@ export async function sendSignal(
     payload: msg,
   });
   if (error) throw error;
+}
+
+export async function recordCastDiagnostic(
+  sessionId: string,
+  requestId: string | null,
+  deviceId: string | null,
+  role: 'sender' | 'receiver',
+  event: string,
+  details: Record<string, string | number | boolean> = {},
+) {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) return;
+
+  const { error } = await supabase.from('cast_diagnostics').insert({
+    user_id: userId,
+    session_id: sessionId,
+    request_id: requestId,
+    device_id: deviceId,
+    role,
+    event,
+    details,
+  });
+  if (error) console.warn('[Diagnostics] Could not record cast event', error.message);
 }
 
 export async function subscribeToSignals(

@@ -33,11 +33,13 @@ export interface PeerConnectionCallbacks {
   onState: (state: ConnectionState) => void;
   onError: (error: Error) => void;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void;
+  onRoute?: (route: 'direct' | 'relay' | 'unknown') => void;
 }
 
 export class WebRTCManager {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
+  private ownsLocalStream = false;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
   private remoteDescriptionSet = false;
   private callbacks: PeerConnectionCallbacks;
@@ -53,6 +55,7 @@ export class WebRTCManager {
     if (this.disposed) throw new Error('Cast session was cancelled');
     this.pc = this.createPeerConnection();
     const stream = existingStream || await mediaDevices.getDisplayMedia();
+    this.ownsLocalStream = !existingStream;
 
     // The iOS broadcast picker resolves asynchronously. If the user stopped
     // while it was open, immediately release the late stream.
@@ -118,8 +121,9 @@ export class WebRTCManager {
 
   dispose(): void {
     this.disposed = true;
-    this.localStream?.getTracks().forEach((t) => t.stop());
+    if (this.ownsLocalStream) this.localStream?.getTracks().forEach((t) => t.stop());
     this.localStream = null;
+    this.ownsLocalStream = false;
     this.pendingIceCandidates = [];
     this.remoteDescriptionSet = false;
     this.pc?.close();
@@ -149,9 +153,39 @@ export class WebRTCManager {
     eventTarget.addEventListener('connectionstatechange', () => {
       const state = pc.connectionState as ConnectionState;
       this.callbacks.onState(state);
+      if (state === 'connected') void this.reportSelectedRoute();
     });
 
     return pc;
+  }
+
+  private async reportSelectedRoute(): Promise<void> {
+    if (!this.pc || !this.callbacks.onRoute) return;
+    try {
+      const stats = await this.pc.getStats();
+      let selectedPair: any;
+      const byId = new Map<string, any>();
+      stats.forEach((report: any) => {
+        byId.set(report.id, report);
+        if (
+          report.type === 'candidate-pair'
+          && report.state === 'succeeded'
+          && (report.nominated || report.selected)
+        ) {
+          selectedPair = report;
+        }
+      });
+      const local = selectedPair ? byId.get(selectedPair.localCandidateId) : null;
+      const remote = selectedPair ? byId.get(selectedPair.remoteCandidateId) : null;
+      const route = local?.candidateType === 'relay' || remote?.candidateType === 'relay'
+        ? 'relay'
+        : selectedPair
+          ? 'direct'
+          : 'unknown';
+      this.callbacks.onRoute(route);
+    } catch {
+      this.callbacks.onRoute('unknown');
+    }
   }
 
   private async flushPendingIceCandidates(): Promise<void> {

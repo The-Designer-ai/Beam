@@ -13,22 +13,14 @@ import {
 
 export default function RootLayout() {
   useEffect(() => {
-    initializeNotifications();
-  }, []);
-
-  async function initializeNotifications() {
-    // Configure how notifications show while app is in foreground
     configureNotificationHandler();
-
-    // Register for push tokens
-    registerForPushNotifications();
-
-    // Handle notification taps (deep linking to Watch/Settings)
     const subscription = setupNotificationTapHandler();
+    registerForPushNotifications().catch((error) => {
+      console.warn('[Notifications] Registration failed', error.message);
+    });
 
-    // Cleanup on unmount
     return () => subscription?.remove();
-  }
+  }, []);
 
   return (
     <GestureHandlerRootView style={styles.root}>

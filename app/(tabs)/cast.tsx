@@ -12,17 +12,21 @@ import { colors, typography, spacing, radius } from '../../lib/theme';
 import { Device } from '../../types';
 import { WebRTCManager } from '../../lib/webrtc';
 import {
+  BeamCastRequest,
   createCastSession,
   endCastSession,
   listSavedDevices,
   listSessionRequests,
+  recordCastDiagnostic,
   sendSignal,
   subscribeToSignals,
   subscribeToSessionRequests,
 } from '../../lib/beam';
-import { sendNotification } from '../../lib/notifications';
+import { sendCastRequestNotification } from '../../lib/notifications';
+import { getDeviceDisplayName } from '../../lib/deviceName';
+import { openIOSScreenBroadcastPicker } from '../../lib/screenBroadcast';
 
-type CastPhase = 'selecting' | 'waiting' | 'casting';
+type CastPhase = 'selecting' | 'waiting' | 'ready' | 'starting' | 'connecting' | 'connected' | 'failed';
 
 export default function CastScreen() {
   const { deviceId } = useLocalSearchParams<{ deviceId?: string }>();
@@ -32,18 +36,28 @@ export default function CastScreen() {
   const [status, setStatus] = useState('');
   const [loadingDevices, setLoadingDevices] = useState(true);
   const [localStreamURL, setLocalStreamURL] = useState<string | null>(null);
+  const phaseRef = useRef<CastPhase>('selecting');
   const sessionIdRef = useRef<string | null>(null);
   const senderDeviceIdRef = useRef<string | null>(null);
   const peerRefs = useRef<Record<string, WebRTCManager>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
+  const acceptedRequestsRef = useRef<BeamCastRequest[]>([]);
   const offeredRequestIdsRef = useRef<Set<string>>(new Set());
   const connectedRequestIdsRef = useRef<Set<string>>(new Set());
   const signalChannelRef = useRef<RealtimeChannel | null>(null);
+  const requestChannelRef = useRef<RealtimeChannel | null>(null);
+  const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedDevices = useMemo(
     () => devices.filter((device) => selectedIds.includes(device.id)),
     [devices, selectedIds],
   );
+
+  function updatePhase(nextPhase: CastPhase, nextStatus: string) {
+    phaseRef.current = nextPhase;
+    setPhase(nextPhase);
+    setStatus(nextStatus);
+  }
 
   useEffect(() => {
     loadDevices();
@@ -51,6 +65,12 @@ export default function CastScreen() {
       stopCast(false);
     };
   }, []);
+
+  useEffect(() => {
+    if (deviceId && phaseRef.current === 'selecting') {
+      setSelectedIds([deviceId]);
+    }
+  }, [deviceId]);
 
   async function loadDevices() {
     setLoadingDevices(true);
@@ -66,7 +86,7 @@ export default function CastScreen() {
   }
 
   function toggleDevice(device: Device) {
-    if (!device.online || phase !== 'selecting') return;
+    if (!device.online || phaseRef.current !== 'selecting') return;
     setSelectedIds((current) =>
       current.includes(device.id)
         ? current.filter((id) => id !== device.id)
@@ -80,8 +100,8 @@ export default function CastScreen() {
       return;
     }
 
-    setPhase('waiting');
-    setStatus('Waiting for selected devices to accept...');
+    updatePhase('waiting', 'Waiting for selected devices to accept...');
+    acceptedRequestsRef.current = [];
     offeredRequestIdsRef.current.clear();
     connectedRequestIdsRef.current.clear();
 
@@ -89,6 +109,9 @@ export default function CastScreen() {
       const { sessionId, senderDevice, requests } = await createCastSession(selectedIds);
       sessionIdRef.current = sessionId;
       senderDeviceIdRef.current = senderDevice.id;
+      void recordCastDiagnostic(sessionId, null, senderDevice.id, 'sender', 'request_created', {
+        receiverCount: requests.length,
+      });
 
       signalChannelRef.current = await subscribeToSignals(
         sessionId,
@@ -101,36 +124,34 @@ export default function CastScreen() {
           try {
             if (msg.type === 'answer') {
               await peer.handleAnswer(msg.sdp);
+              void recordCastDiagnostic(sessionId, requestId, senderDevice.id, 'sender', 'answer_received');
             } else if (msg.type === 'ice') {
               await peer.handleIceCandidate(msg.candidate);
             }
           } catch (error: any) {
             console.warn('[Signal] Sender could not handle signal', error.message);
-            setStatus('Connection failed');
+            updatePhase('failed', 'Connection failed');
+            void recordCastDiagnostic(sessionId, requestId, senderDevice.id, 'sender', 'signal_failed', {
+              message: error.message,
+            });
           }
         },
       );
 
-      selectedDevices.forEach((device) => {
-        if (!device.pushToken) return;
-        sendNotification(device.pushToken, 'Incoming Beam Cast', 'Someone wants to cast to this device.', {
-          type: 'cast_request',
-          sessionId,
-        }).catch((error) => console.warn('[Notifications] Cast request push failed', error.message));
+      requests.forEach((request) => {
+        sendCastRequestNotification(sessionId, request.receiverDeviceId).catch((error) => {
+          console.warn('[Notifications] Cast request push failed', error.message);
+        });
       });
 
-      const channel = subscribeToSessionRequests(sessionId, () => {
+      requestChannelRef.current = subscribeToSessionRequests(sessionId, () => {
         handleAcceptedRequests();
       });
 
-      setTimeout(() => {
-        channel.unsubscribe();
-      }, 65_000);
-
       if (requests.length === 0) throw new Error('No cast requests were created.');
       setTimeout(() => handleAcceptedRequests(), 800);
-      setTimeout(() => {
-        if (phase === 'waiting' && offeredRequestIdsRef.current.size === 0) {
+      requestTimeoutRef.current = setTimeout(() => {
+        if (phaseRef.current === 'waiting' && acceptedRequestsRef.current.length === 0) {
           Alert.alert('No Response', 'No devices accepted before the request expired.');
           stopCast();
         }
@@ -143,40 +164,83 @@ export default function CastScreen() {
 
   async function handleAcceptedRequests() {
     const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+
+    try {
+      const requests = await listSessionRequests(sessionId);
+      const accepted = requests.filter((request) => request.status === 'accepted');
+      if (accepted.length === 0) return;
+
+      acceptedRequestsRef.current = accepted;
+      if (!localStreamRef.current) {
+        updatePhase('ready', `${accepted.length} device${accepted.length === 1 ? '' : 's'} accepted`);
+        return;
+      }
+      await connectAcceptedRequests(accepted);
+    } catch (error: any) {
+      console.warn('[Cast] Could not refresh accepted requests', error.message);
+    }
+  }
+
+  async function startScreenBroadcast() {
+    const sessionId = sessionIdRef.current;
     const senderDeviceId = senderDeviceIdRef.current;
-    if (!sessionId || !senderDeviceId) return;
+    if (!sessionId || !senderDeviceId || acceptedRequestsRef.current.length === 0) return;
 
-    const requests = await listSessionRequests(sessionId);
-    const accepted = requests.filter((request) => request.status === 'accepted');
-    if (accepted.length === 0) return;
+    updatePhase('starting', 'Choose Beam, then tap Start Broadcast');
+    void recordCastDiagnostic(sessionId, null, senderDeviceId, 'sender', 'picker_requested');
 
-    if (!localStreamRef.current) {
-      setStatus('Open the iOS screen picker to start casting.');
+    try {
+      await openIOSScreenBroadcastPicker();
+      void recordCastDiagnostic(sessionId, null, senderDeviceId, 'sender', 'broadcast_started');
       const stream = await mediaDevices.getDisplayMedia();
       localStreamRef.current = stream;
       setLocalStreamURL(stream.toURL());
-      setPhase('casting');
+      await connectAcceptedRequests(acceptedRequestsRef.current);
+    } catch (error: any) {
+      updatePhase('ready', 'Ready to start screen broadcast');
+      void recordCastDiagnostic(sessionId, null, senderDeviceId, 'sender', 'picker_failed', {
+        message: error.message,
+      });
+      Alert.alert('Screen Broadcast', error.message || 'Could not start the iOS screen broadcast.');
     }
+  }
 
-    for (const request of accepted) {
+  async function connectAcceptedRequests(requests: BeamCastRequest[]) {
+    const sessionId = sessionIdRef.current;
+    const senderDeviceId = senderDeviceIdRef.current;
+    const stream = localStreamRef.current;
+    if (!sessionId || !senderDeviceId || !stream) return;
+
+    updatePhase('connecting', 'Connecting...');
+    for (const request of requests) {
       if (offeredRequestIdsRef.current.has(request.id)) continue;
       offeredRequestIdsRef.current.add(request.id);
 
       const webrtc = new WebRTCManager({
         onStream: () => undefined,
         onState: (state) => {
+          void recordCastDiagnostic(sessionId, request.id, senderDeviceId, 'sender', `connection_${state}`);
           if (state === 'connected') {
             connectedRequestIdsRef.current.add(request.id);
             const count = connectedRequestIdsRef.current.size;
-            setStatus(`Streaming to ${count} device${count === 1 ? '' : 's'}`);
+            updatePhase('connected', `Streaming to ${count} device${count === 1 ? '' : 's'}`);
           } else if (state === 'failed' || state === 'disconnected') {
             connectedRequestIdsRef.current.delete(request.id);
-            setStatus('Connection failed');
-          } else {
-            setStatus('Connecting...');
+            updatePhase('failed', 'Connection failed');
+          } else if (phaseRef.current !== 'connected') {
+            updatePhase('connecting', 'Connecting...');
           }
         },
-        onError: (error) => console.warn('[WebRTC]', error.message),
+        onError: (error) => {
+          console.warn('[WebRTC]', error.message);
+          void recordCastDiagnostic(sessionId, request.id, senderDeviceId, 'sender', 'webrtc_error', {
+            message: error.message,
+          });
+        },
+        onRoute: (route) => {
+          void recordCastDiagnostic(sessionId, request.id, senderDeviceId, 'sender', 'network_route', { route });
+        },
         onIceCandidate: (candidate) => {
           sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
             type: 'ice',
@@ -186,16 +250,36 @@ export default function CastScreen() {
       });
       peerRefs.current[request.id] = webrtc;
 
-      const offer = await webrtc.createOffer(localStreamRef.current);
-      await sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
-        type: 'offer',
-        sdp: offer,
-      });
-      setStatus('Connecting...');
+      try {
+        const offer = await webrtc.createOffer(stream);
+        await sendSignal(sessionId, request.id, senderDeviceId, request.receiverDeviceId, {
+          type: 'offer',
+          sdp: offer,
+        });
+        void recordCastDiagnostic(sessionId, request.id, senderDeviceId, 'sender', 'offer_sent');
+      } catch (error: any) {
+        offeredRequestIdsRef.current.delete(request.id);
+        updatePhase('failed', 'Connection failed');
+        void recordCastDiagnostic(sessionId, request.id, senderDeviceId, 'sender', 'offer_failed', {
+          message: error.message,
+        });
+      }
     }
   }
 
+  async function retryConnections() {
+    Object.values(peerRefs.current).forEach((peer) => peer.dispose());
+    peerRefs.current = {};
+    offeredRequestIdsRef.current.clear();
+    connectedRequestIdsRef.current.clear();
+    await connectAcceptedRequests(acceptedRequestsRef.current);
+  }
+
   async function stopCast(updateRemote = true) {
+    if (requestTimeoutRef.current) clearTimeout(requestTimeoutRef.current);
+    requestTimeoutRef.current = null;
+    requestChannelRef.current?.unsubscribe();
+    requestChannelRef.current = null;
     Object.values(peerRefs.current).forEach((peer) => peer.dispose());
     peerRefs.current = {};
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -210,11 +294,14 @@ export default function CastScreen() {
 
     sessionIdRef.current = null;
     senderDeviceIdRef.current = null;
+    acceptedRequestsRef.current = [];
     offeredRequestIdsRef.current.clear();
     connectedRequestIdsRef.current.clear();
-    setPhase('selecting');
-    setStatus('');
+    updatePhase('selecting', '');
   }
+
+  const selectedNames = selectedDevices.map(getDeviceDisplayName).join(', ');
+  const canStartBroadcast = phase === 'ready' || (phase === 'failed' && !localStreamURL);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -231,15 +318,33 @@ export default function CastScreen() {
             <View style={styles.preview}>
               <RTCView streamURL={localStreamURL} objectFit="contain" style={styles.video} />
             </View>
-          ) : (
+          ) : phase === 'waiting' || phase === 'starting' ? (
             <ActivityIndicator color={colors.primary} />
+          ) : (
+            <AppIcon ios="rectangle.on.rectangle" android="screen_share" size={38} color={colors.primary} />
           )}
           <Text style={[typography.headline, styles.statusText]}>{status}</Text>
-          <Text style={[typography.subhead, styles.mutedText]}>
-            {selectedDevices.map((device) => device.name).join(', ')}
-          </Text>
+          <Text style={[typography.subhead, styles.mutedText]}>{selectedNames}</Text>
+          {canStartBroadcast && (
+            <BeamButton
+              title="Start Screen Broadcast"
+              onPress={startScreenBroadcast}
+              icon={<AppIcon ios="record.circle" android="screen_share" size={18} color={colors.textInverse} />}
+              iosSystemImage="record.circle"
+              style={styles.primaryAction}
+            />
+          )}
+          {phase === 'failed' && localStreamURL && (
+            <BeamButton
+              title="Retry Connection"
+              onPress={retryConnections}
+              icon={<AppIcon ios="arrow.clockwise" android="refresh" size={18} color={colors.textInverse} />}
+              iosSystemImage="arrow.clockwise"
+              style={styles.primaryAction}
+            />
+          )}
           <BeamButton
-            title="Stop Casting"
+            title="Cancel Casting"
             onPress={() => stopCast()}
             variant="secondary"
             role="destructive"
@@ -279,7 +384,7 @@ export default function CastScreen() {
             >
               <View style={styles.deviceSelectRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[typography.headline, { color: colors.text }]}>{device.name}</Text>
+                  <Text style={[typography.headline, { color: colors.text }]}>{getDeviceDisplayName(device)}</Text>
                   <Text style={[typography.caption1, { color: colors.textSecondary }]}>Online</Text>
                 </View>
                 <AppIcon
@@ -311,87 +416,29 @@ export default function CastScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  header: {
-    paddingTop: spacing.md,
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.lg,
-  },
-  statusCard: {
-    marginHorizontal: spacing.xxl,
-    marginBottom: spacing.xl,
-  },
-  statusContent: {
-    alignItems: 'center',
-    gap: spacing.md,
-  },
+  container: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingTop: spacing.md, paddingHorizontal: spacing.xxl, paddingBottom: spacing.lg },
+  statusCard: { marginHorizontal: spacing.xxl, marginBottom: spacing.xl },
+  statusContent: { alignItems: 'center', gap: spacing.md },
   preview: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    backgroundColor: colors.bgSecondary,
+    width: '100%', aspectRatio: 16 / 9, borderRadius: radius.lg,
+    overflow: 'hidden', backgroundColor: colors.bgSecondary,
   },
-  video: {
-    flex: 1,
-  },
-  statusText: {
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  sectionTitle: {
-    color: colors.text,
-    paddingHorizontal: spacing.xxl,
-    marginBottom: spacing.md,
-  },
-  list: {
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: 180,
-  },
-  messageState: {
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.xxxl,
-  },
-  mutedText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  emptyContent: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.xxl,
-  },
+  video: { flex: 1 },
+  statusText: { color: colors.primary, textAlign: 'center' },
+  sectionTitle: { color: colors.text, paddingHorizontal: spacing.xxl, marginBottom: spacing.md },
+  list: { paddingHorizontal: spacing.xxl, paddingBottom: 180 },
+  messageState: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxxl },
+  mutedText: { color: colors.textSecondary, textAlign: 'center' },
+  emptyContent: { alignItems: 'center', gap: spacing.sm, padding: spacing.xxl },
   selectableDevice: {
-    marginBottom: spacing.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.glassBg,
-    borderWidth: 1,
-    borderColor: colors.separator,
-    padding: spacing.lg,
+    marginBottom: spacing.sm, borderRadius: radius.lg, backgroundColor: colors.glassBg,
+    borderWidth: 1, borderColor: colors.separator, padding: spacing.lg,
   },
-  selectedDevice: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  deviceSelectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  footer: {
-    position: 'absolute',
-    left: spacing.xxl,
-    right: spacing.xxl,
-    bottom: 110,
-  },
-  fullButton: {
-    width: '100%',
-  },
-  stopButton: {
-    minWidth: 160,
-  },
+  selectedDevice: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  deviceSelectRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  footer: { position: 'absolute', left: spacing.xxl, right: spacing.xxl, bottom: 110 },
+  fullButton: { width: '100%' },
+  primaryAction: { minWidth: 220 },
+  stopButton: { minWidth: 170 },
 });

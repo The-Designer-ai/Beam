@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Modal } from 'react-native';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
@@ -12,6 +12,7 @@ import { WebRTCManager } from '../../lib/webrtc';
 import {
   BeamCastRequest,
   listIncomingCastRequests,
+  recordCastDiagnostic,
   registerCurrentDevice,
   respondToCastRequest,
   sendSignal,
@@ -27,6 +28,7 @@ export default function WatchScreen() {
   const [loading, setLoading] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [muted, setMuted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const signalChannelRef = useRef<RealtimeChannel | null>(null);
 
@@ -76,10 +78,24 @@ export default function WatchScreen() {
       const webrtc = new WebRTCManager({
         onStream: (incomingStream) => {
           setStream(incomingStream);
-          setStatus('Receiving cast');
+          setStatus('Connected');
+          void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'stream_received');
         },
-        onState: (state) => setStatus(state === 'connected' ? 'Receiving cast' : state),
-        onError: (error) => console.warn('[WebRTC]', error.message),
+        onState: (state) => {
+          void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', `connection_${state}`);
+          if (state === 'connected') setStatus('Connected');
+          else if (state === 'failed' || state === 'disconnected') setStatus('Connection failed');
+          else setStatus('Connecting...');
+        },
+        onError: (error) => {
+          console.warn('[WebRTC]', error.message);
+          void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'webrtc_error', {
+            message: error.message,
+          });
+        },
+        onRoute: (route) => {
+          void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'network_route', { route });
+        },
         onIceCandidate: (candidate) => {
           if (!currentDeviceId || !request.senderDeviceId) return;
           sendSignal(request.sessionId, request.id, currentDeviceId, request.senderDeviceId, {
@@ -94,11 +110,13 @@ export default function WatchScreen() {
       signalChannelRef.current = await subscribeToSignals(request.sessionId, currentDeviceId, async (msg, row) => {
         try {
           if (msg.type === 'offer') {
+            void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'offer_received');
             const answer = await webrtc.handleOffer(msg.sdp);
             await sendSignal(request.sessionId, request.id, currentDeviceId, row.sender_device_id, {
               type: 'answer',
               sdp: answer,
             });
+            void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'answer_sent');
           } else if (msg.type === 'ice') {
             await webrtc.handleIceCandidate(msg.candidate);
           } else if (msg.type === 'leave') {
@@ -110,6 +128,7 @@ export default function WatchScreen() {
       });
 
       await respondToCastRequest(request.id, 'accepted');
+      void recordCastDiagnostic(request.sessionId, request.id, currentDeviceId, 'receiver', 'request_accepted');
       setStatus('Accepted. Waiting for sender to start screen sharing...');
     } catch (error: any) {
       signalChannelRef.current?.unsubscribe();
@@ -144,6 +163,7 @@ export default function WatchScreen() {
     setCurrentRequest(null);
     setStatus('');
     setMuted(false);
+    setFullscreen(false);
     loadRequests();
   }
 
@@ -172,6 +192,15 @@ export default function WatchScreen() {
 
             <View style={styles.receiverActions}>
               <BeamButton
+                title="Full Screen"
+                onPress={() => setFullscreen(true)}
+                variant="secondary"
+                disabled={!stream}
+                icon={<AppIcon ios="arrow.up.left.and.arrow.down.right" android="fullscreen" size={18} color={colors.primary} />}
+                iosSystemImage="arrow.up.left.and.arrow.down.right"
+                style={styles.actionButton}
+              />
+              <BeamButton
                 title={muted ? 'Unmute Audio' : 'Mute Audio'}
                 onPress={toggleMute}
                 variant="secondary"
@@ -192,6 +221,25 @@ export default function WatchScreen() {
               />
             </View>
           </Glass>
+          <Modal
+            visible={fullscreen && !!stream}
+            animationType="fade"
+            presentationStyle="fullScreen"
+            onRequestClose={() => setFullscreen(false)}
+          >
+            <SafeAreaView style={styles.fullscreenContainer}>
+              {stream && <RTCView streamURL={stream.toURL()} objectFit="contain" style={styles.fullscreenVideo} />}
+              <View style={styles.fullscreenActions}>
+                <BeamButton
+                  title="Close Full Screen"
+                  onPress={() => setFullscreen(false)}
+                  variant="secondary"
+                  icon={<AppIcon ios="xmark" android="close" size={18} color={colors.primary} />}
+                  iosSystemImage="xmark"
+                />
+              </View>
+            </SafeAreaView>
+          </Modal>
         </Animated.View>
       ) : (
         <Animated.ScrollView
@@ -264,16 +312,19 @@ const styles = StyleSheet.create({
   receivingCard: {
     width: '100%',
     maxWidth: 720,
+    flex: 1,
     alignSelf: 'center',
   },
   receivingCardContent: {
     padding: spacing.xxl,
     alignItems: 'center',
     width: '100%',
+    flex: 1,
   },
   videoContainer: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    flex: 1,
+    minHeight: 260,
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.bgSecondary,
@@ -312,11 +363,25 @@ const styles = StyleSheet.create({
   },
   receiverActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
     width: '100%',
     marginTop: spacing.md,
   },
   actionButton: {
+    flexGrow: 1,
+    flexBasis: 150,
+  },
+  fullscreenContainer: {
     flex: 1,
+    backgroundColor: '#000000',
+  },
+  fullscreenVideo: {
+    flex: 1,
+  },
+  fullscreenActions: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
   },
 });

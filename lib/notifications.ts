@@ -3,6 +3,8 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
+import { supabase } from './supabase';
 
 const PUSH_TOKEN_KEY = '@beam/push_token';
 
@@ -37,9 +39,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId: undefined,
-  });
+  const projectId = Constants.easConfig?.projectId
+    ?? Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) throw new Error('The EAS project ID is missing from this build.');
+
+  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
   const token = tokenData.data;
   await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
 
@@ -88,32 +92,15 @@ function handleNotificationResponse(response: Notifications.NotificationResponse
   }
 }
 
-export async function sendNotification(
-  pushToken: string,
-  title: string,
-  body: string,
-  data?: Record<string, any>,
+export async function sendCastRequestNotification(
+  sessionId: string,
+  receiverDeviceId: string,
 ): Promise<void> {
-  const response = await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Accept-encoding': 'gzip, deflate',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      to: pushToken,
-      sound: 'default',
-      title,
-      body,
-      data: data || {},
-      _displayInForeground: true,
-    }),
+  const { data, error } = await supabase.functions.invoke('send-cast-notification', {
+    body: { sessionId, receiverDeviceId },
   });
-
-  if (!response.ok) {
-    throw new Error(`Expo push failed with status ${response.status}`);
-  }
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
 }
 
 export async function unregisterPushNotifications(): Promise<void> {

@@ -14,6 +14,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSReplayKitUsageDescription": "Beam needs screen recording permission to mirror your screen to other devices.",
+        "NSLocalNetworkUsageDescription": "Beam uses your local network to connect to nearby devices for screen casting.",
         "NSCameraUsageDescription": "Beam needs camera access for video streaming.",
         "NSMicrophoneUsageDescription": "Beam needs microphone access for audio in screen sharing.",
         "UIBackgroundModes": [
@@ -26,7 +27,7 @@
           "group.com.beam.stream.appgroup"
         ]
       },
-      "buildNumber": "30"
+      "buildNumber": "32"
     },
     "plugins": [
       "expo-router",
